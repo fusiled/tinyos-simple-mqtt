@@ -1,0 +1,5 @@
+COMPONENT=NodeCApp
+CFLAGS += -I$(TOSDIR)/lib/printf
+CFLAGS += -I../commons
+#CFLAGS += -DNEW_PRINTF_SEMANTICS
+include $(MAKERULES)
