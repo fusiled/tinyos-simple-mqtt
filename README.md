@@ -10,5 +10,5 @@ The following features need to be implemented:
 3. Publish: each node can publish data on at most one of the three afore mentioned topics. Publication is performed through a PUBLISH message with the following fields: topic name, payload and QoS levels (i.e. QoS 0 = at most once, QoS 1 = at least once). When a node publish a message on a topic, this is received by the PAN and forwarded to all nodes that have subscribed to a particular topic.
 4.  QoS management: like in MQTT each message is subject to two levels of QoS. For PUBLISH messages, the QoS controls the transmission from a node to the PAN coordinator. If QoS is set to 0, the node transmit the message just once. If QoS is set to 1, the node keeps retransmitting the message until the PAN coordinator acknowledges it with a PUBACK message. The same holds for subscriptions: the PAN coordinator forwards the message received on a topic to all nodes subscribed to that topic, using the QoS logic independently for each node (according to what a node has specified in the SUBSCRIBE message).
 
-##Packet Specification
+## Packet Specification
 There are 6 different kind of packet. Packet construction is performed by the functions contained in `commons/Commons.h`
