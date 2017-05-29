@@ -40,7 +40,7 @@ implementation
 	{
     		if(err == SUCCESS) 
 		{
-	  		printf("Pan Coordinator Ready\n");
+	  		printf("[PanC] Ready!\n");
  		}
 		else
 		{
@@ -53,13 +53,13 @@ implementation
 	//***************** Message Handlers *****************//
 	void handle_connect(uint8_t node_id)
 	{
-		active_node[node_id]=TRUE;
-		printf("Pan Coordinator is now connected with Node %d", node_id);
+		active_node[node_id-1]=TRUE;
+		printf("[PanC] active_node[%d]=%d", node_id, active_node[node_id-1]);
 		connack_pkt = call Packet.getPayload(&pkt,sizeof(connack_msg_t));
 		build_connack_msg(connack_pkt,node_id);
-		if( call AMSend.send(node_id,&pkt, sizeof(connack_msg_t)) != SUCCESS)
+		if( call AMSend.send(node_id,&pkt, sizeof(connack_msg_t)) == SUCCESS)
 		{
-			//TODO handle error
+			printf("[PanC] Sent CONNACK(%d)\n",node_id);
 		} 
 	}
 
@@ -76,7 +76,7 @@ implementation
 		{
 			case CONNECT_CODE: handle_connect(node_id); break;
 			case PUBACK_CODE: handle_puback(node_id); break;
-			default: printf("Invalid code at Task on panC\n");
+			default: printf("[PanC] Invalid code_id %d TaskSimpleMessage.runTask\n",code_id);
 		}
 	}
 	//***************** Receive Interface *****************//
@@ -87,7 +87,7 @@ implementation
 		//consider only the important bits
 		uint8_t code_id=chunk & 7;
 		uint8_t node_id= (chunk & (7<<3))>>3;
-		printf("PanC received a message\n");
+		printf("[PanC] new msg. code_id: %d, node_id: %d\n", code_id,node_id);
 		switch(code_id)
 		{
 			case PUBACK_CODE: //use CONNECT_CODE case
@@ -99,7 +99,7 @@ implementation
 				break;
 			case PUBLISH_CODE: break;
 			case SUBSCRIBE_CODE: break;
-			default: printf("invalid code recevied at PanC\n");
+			default: printf("[PanC] Invalid code %d at Receive.receive\n", code_id);
 		}
   		return msg;
 	}
@@ -109,7 +109,7 @@ implementation
 	{
 		if(err != SUCCESS )
 		{
-			printf("Panc Failed msg transmission retrying...");
+			printf("[Panc] Failed msg transmission!");
 			//TODO continue failure handling with retransmission
     		}
 	}

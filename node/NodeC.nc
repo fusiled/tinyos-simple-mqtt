@@ -24,9 +24,11 @@ module NodeC
 }
 implementation
 {
+	bool connected = FALSE;
 	message_t pkt;	
 	//***************** Boot interface ********************//
   	event void Boot.booted() {
+  		connected = FALSE;
 		call SplitControl.start();
 	}
 
@@ -36,7 +38,7 @@ implementation
 	{
     		if(err == SUCCESS) 
 		{
-	  		printf("I'm node %d,READY!: Connecting to PanCoordinator\n",TOS_NODE_ID);
+	  		printf("[Node %d] READY! Connecting to PanCoordinator\n",TOS_NODE_ID);
 			call TaskSimpleMessage.postTask(CONNECT_CODE,TOS_NODE_ID);
  		}
 		else
@@ -54,7 +56,7 @@ implementation
 		build_connect_msg(mess,TOS_NODE_ID);
 		if(call AMSend.send(PAN_COORDINATOR_ADDRESS,&pkt,sizeof(connect_msg_t)) == SUCCESS)
 		{
-			printf("CONNECT(%d) sent\n",TOS_NODE_ID);
+			printf("[Node %d] CONNECT(%d) sent\n",TOS_NODE_ID,TOS_NODE_ID);
 		}
 	}
 
@@ -83,11 +85,9 @@ implementation
 		switch(code_id)
 		{
 			case PUBACK_CODE: //use CONNECT_CODE case
-			case CONNECT_CODE:
-				if(call TaskSimpleMessage.postTask(code_id,node_id)!=SUCCESS)
-				{
-					//TODO implement timer for task repost
-				}
+			case CONNACK_CODE:
+				printf("[Node %d] CONNACK received!", TOS_NODE_ID); 
+				connected=TRUE; 
 				break;
 			case PUBLISH_CODE: break;
 			case SUBSCRIBE_CODE: break;
