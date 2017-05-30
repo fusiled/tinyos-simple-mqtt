@@ -18,6 +18,7 @@ module PanC
     		interface AMSend;
 	    	interface SplitControl;
 		interface Receive;
+		
  	}
 }
 implementation
@@ -31,6 +32,8 @@ implementation
 	//***************** Boot interface ********************//
   	event void Boot.booted()
 	{
+		am_addr_t addr = call AMPacket.address();
+		printf("[PanC] address: %d\n", addr);
 		call SplitControl.start();
 	}
 
@@ -53,11 +56,11 @@ implementation
 	//***************** Message Handlers *****************//
 	void handle_connect(uint8_t node_id)
 	{
-		active_node[node_id-1]=TRUE;
-		printf("[PanC] active_node[%d]=%d", node_id, active_node[node_id-1]);
+		active_node[node_id]=TRUE;
+		printf("[PanC] active_node[%d]=%d\n", node_id, active_node[node_id-1]);
 		connack_pkt = call Packet.getPayload(&pkt,sizeof(connack_msg_t));
 		build_connack_msg(connack_pkt,node_id);
-		if( call AMSend.send(node_id,&pkt, sizeof(connack_msg_t)) == SUCCESS)
+		if( call AMSend.send( (node_id+1) ,&pkt, sizeof(connack_msg_t)) == SUCCESS)
 		{
 			printf("[PanC] Sent CONNACK(%d)\n",node_id);
 		} 

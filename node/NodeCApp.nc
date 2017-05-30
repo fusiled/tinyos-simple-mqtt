@@ -13,7 +13,8 @@ implementation
         components new AMReceiverC(AM_MY_MSG);
         components ActiveMessageC;
 	components TaskSimpleMessageC;
-	
+	components new TimerMilliC() as SensorTimerC;
+	components new TimerMilliC() as TimeoutTimerC;
 	//printf components
 	components SerialPrintfC;
 	components SerialStartC;
@@ -36,4 +37,6 @@ implementation
 	NodeC.TemperatureRead -> TemperatureSensor;
 	NodeC.HumidityRead -> HumiditySensor;
 	NodeC.LuminosityRead -> LuminositySensor;
+	NodeC.SensorTimer -> SensorTimerC;
+	NodeC.TimeoutTimer -> TimeoutTimerC;
 }
