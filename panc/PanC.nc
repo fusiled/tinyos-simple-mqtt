@@ -6,14 +6,13 @@
 	#define N_NODES 8
 #endif
 
-#define QOS_NOT_SET 5
-
 #include "printf.h"
 module PanC
 {
 	uses 
 	{
 		interface TaskSimpleMessage;
+		interface PublishTask;
 		interface SubscribeTask;
 		interface Boot;
 	    	interface AMPacket;
@@ -107,13 +106,26 @@ implementation
 		subscribe_msg_t * sub_msg;
                 uint8_t topic_mask;
                 uint8_t qos_mask;
+		uint8_t publish_qos;
+		uint16_t publish_payload;
+		uint8_t publish_topic;
 		if(len==sizeof(uint8_t))
 		{
 			chunk = *((uint8_t *)payload);
 		}
-		else if(len==sizeof(uint16_t))
+		else if(len==sizeof(subscribe_msg_t))
 		{
 			chunk = ((uint8_t *)payload)[1];
+		}
+		else if(len==sizeof(publish_msg_t))
+		{
+			publish_msg_t * pub_msg = (publish_msg_t *) payload;
+			chunk = pub_msg->header;
+		}
+		else
+		{
+			printf("[PanC] arrived a packet of wrong size!\n");
+			return msg;
 		}
 		code_id=chunk & 7;
 		node_id= (chunk >> 3) & 7;
@@ -127,11 +139,16 @@ implementation
 					//TODO implement timer for task repost
 				}
 				break;
-			case PUBLISH_CODE: break;
+			case PUBLISH_CODE:
+				publish_qos =( ((publish_msg_t *)payload)->payload ) & 1;
+				publish_topic = chunk >> PUBLISH_TOPIC_ALIGNMENT;
+				publish_payload = ( ((publish_msg_t *)payload)->payload )>>1; 
+				call PublishTask.postTask(node_id,publish_qos,publish_topic,publish_payload);
+				 break;
 			case SUBSCRIBE_CODE: sub_msg = (subscribe_msg_t *)payload;
 				topic_mask = (*sub_msg >> SUBSCRIBE_TOPIC_MASK_ALIGNMENT) & 7;
                                 qos_mask = (*sub_msg >> SUBSCRIBE_QOS_MASK_ALIGNMENT) & 7;
-                                call SubscribeTask.postTask(code_id,node_id,topic_mask,qos_mask); 
+                                call SubscribeTask.postTask(node_id,topic_mask,qos_mask); 
 				break;
 			case SUBACK_CODE: break;
 			default: printf("[PanC] Invalid code %d at Receive.receive\n", code_id);
@@ -149,7 +166,7 @@ implementation
     		}
 	}
 
-	event void SubscribeTask.runTask(uint8_t code_id, uint8_t node_id, uint8_t topic_mask, uint8_t qos_mask)
+	event void SubscribeTask.runTask(uint8_t node_id, uint8_t topic_mask, uint8_t qos_mask)
         {
 		if(active_node[node_id]==TRUE)
 		{
@@ -160,5 +177,10 @@ implementation
 		}		
         }
 
+
+	event void PublishTask.runTask(uint8_t node_id, uint8_t publish_qos,uint8_t publish_topic,uint16_t publish_payload)
+	{
+		printf("[PanC] PUBLISH from node %d. qos: %d, topic: %d, payload: %d\n", node_id,publish_qos,publish_topic,publish_payload);
+	}
 
 }

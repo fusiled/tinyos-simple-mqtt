@@ -5,25 +5,35 @@
 	#define N_NODES 8
 #endif
 
+#define TEMPERATURE_ID 0
+#define HUMIDITY_ID 1
+#define LUMINOSITY_ID 2
+
 
 #define SENSOR_PERIOD 1024
 #define CONNECT_TIMEOUT 2048
 #define QOS_SEED 157
 #define NODE_ID (TOS_NODE_ID - 1 )
+
 module NodeC
 {
 	uses 
 	{
 		interface TaskSimpleMessage;
+		interface PublishTask;
 		interface Boot;
 	    	interface AMPacket;
 		interface Packet;
     		interface AMSend;
 	    	interface SplitControl;
 		interface Receive;
+
+		//Sensors
 		interface Read<uint16_t> as TemperatureRead;
 		interface Read<uint16_t> as HumidityRead;
 		interface Read<uint16_t> as LuminosityRead;
+		
+		//Timers
 		interface Timer<TMilli> as SensorTimer;
 		interface Timer<TMilli> as TimeoutTimer;
  	}
@@ -36,6 +46,8 @@ implementation
 	uint8_t sensor_selector;
 	uint8_t topic_mask;
 	uint8_t qos_mask;
+	uint8_t timeout_type;
+        bool publish_qos;
 
 	task void subscribeTask();	
 
@@ -46,6 +58,7 @@ implementation
 		sensor_selector = NODE_ID;
 		topic_mask = NODE_ID;
 		qos_mask = ( QOS_SEED >> NODE_ID ) & 7;
+		publish_qos = NODE_ID % 2;
 		call SplitControl.start();
 	}
 
@@ -74,6 +87,7 @@ implementation
 		if(call AMSend.send(PAN_COORDINATOR_ADDRESS,&pkt,sizeof(connect_msg_t)) == SUCCESS)
 		{
 			printf("[Node %d] CONNECT sent\n",NODE_ID);
+			timeout_type=CONNECT_CODE;
 			call TimeoutTimer.startOneShot(CONNECT_TIMEOUT);
 		}
 	}
@@ -103,13 +117,15 @@ implementation
 		printf("[Node %d] received message. code_id: %d, node_id: %d\n", NODE_ID,code_id,node_id);
 		switch(code_id)
 		{
-			case CONNACK_CODE: printf("[Node %d] CONNACK received!\n", NODE_ID);
+			case CONNACK_CODE: call TimeoutTimer.stop(); 
+				printf("[Node %d] CONNACK received!\n", NODE_ID);
 				connected=TRUE;
 				call SensorTimer.startPeriodic(SENSOR_PERIOD);
 				post subscribeTask(); 
 				break;
 			case PUBLISH_CODE: break;
-			case SUBACK_CODE: 
+			case SUBACK_CODE:
+				call TimeoutTimer.stop(); 
 				printf("[Node %d], SUBACK received!\n",NODE_ID);
 				break;
 		}
@@ -132,6 +148,7 @@ implementation
 		if(result==SUCCESS)
                 {
                         //printf("[Node %d] TEM: %d\n", NODE_ID,data);
+			call PublishTask.postTask(NODE_ID,publish_qos,TEMPERATURE_ID, data>>1 );
                 }
                 else
                 {
@@ -144,6 +161,7 @@ implementation
 	{
 		if(result==SUCCESS)
                 {
+			//call PublishTask.postTask(NODE_ID,publish_qos,HUMIDITY_ID, data>>1 );
                         //printf("[Node %d] HUM: %d\n", NODE_ID,data);
                 }
                 else
@@ -157,6 +175,7 @@ implementation
 	{
 		if(result==SUCCESS)
 		{
+			//call PublishTask.postTask(NODE_ID,publish_qos,LUMINOSITY_ID, data>>1 );
 			//printf("[Node %d] LUM: %d\n", NODE_ID,data);
 		}
 		else
@@ -178,10 +197,18 @@ implementation
 
 	event void TimeoutTimer.fired()
 	{
-		if(connected!=TRUE)
+		switch(timeout_type)
 		{
-			printf("[Node %d] CONNACK not received. Retrying...\n",NODE_ID);
-			call TaskSimpleMessage.postTask(CONNECT_CODE,NODE_ID);
+			case CONNECT_CODE:
+				if(connected!=TRUE)
+		                {
+                		        printf("[Node %d] CONNACK not received. Retrying...\n",NODE_ID);
+                        		call TaskSimpleMessage.postTask(CONNECT_CODE,NODE_ID);
+                		}
+				break;
+			case SUBSCRIBE_CODE:
+				post subscribeTask();
+				break;
 		}
 	}
 
@@ -192,8 +219,23 @@ implementation
                 build_subscribe_msg(mess,NODE_ID,topic_mask,qos_mask);
                 if(call AMSend.send(PAN_COORDINATOR_ADDRESS,&pkt,sizeof(subscribe_msg_t)) == SUCCESS)
                 {
+			timeout_type=SUBSCRIBE_CODE;
+			call TimeoutTimer.startOneShot(CONNECT_TIMEOUT);
                         printf("[Node %d] SUBSCRIBE(%d,%d) sent\n",NODE_ID,topic_mask,qos_mask);
                 }
 
+	}
+
+
+	 event void PublishTask.runTask(uint8_t node_id, uint8_t qos, uint8_t topic, uint16_t payload)
+	{
+		publish_msg_t * mess = call Packet.getPayload(&pkt,sizeof(publish_msg_t));
+                build_publish_msg(mess,NODE_ID,qos,topic,payload);
+                if(call AMSend.send(PAN_COORDINATOR_ADDRESS,&pkt,sizeof(publish_msg_t)) == SUCCESS)
+                {
+                        timeout_type=PUBLISH_CODE;
+                        call TimeoutTimer.startOneShot(CONNECT_TIMEOUT);
+                        printf("[Node %d] PUBLISH(%d,%d,%d) sent\n",NODE_ID,qos,topic,payload);
+                }
 	}
 }

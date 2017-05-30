@@ -12,7 +12,10 @@ implementation
 	components new AMSenderC(AM_MY_MSG);
         components new AMReceiverC(AM_MY_MSG);
         components ActiveMessageC;
+
 	components TaskSimpleMessageC;
+	components PublishTaskC;
+
 	components new TimerMilliC() as SensorTimerC;
 	components new TimerMilliC() as TimeoutTimerC;
 	//printf components
@@ -33,7 +36,9 @@ implementation
         NodeC.Packet -> AMSenderC;
 
 	NodeC.TaskSimpleMessage -> TaskSimpleMessageC;
-	
+	NodeC.PublishTask -> PublishTaskC;	
+
+
 	NodeC.TemperatureRead -> TemperatureSensor;
 	NodeC.HumidityRead -> HumiditySensor;
 	NodeC.LuminosityRead -> LuminositySensor;

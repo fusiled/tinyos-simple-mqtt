@@ -16,6 +16,7 @@ implementation
 	//taks components
 	components TaskSimpleMessageC;	
 	components SubscribeTaskC;
+	components PublishTaskC;
 
 	//printf components
         components SerialPrintfC;
@@ -27,6 +28,7 @@ implementation
 	PanC.SplitControl -> ActiveMessageC;
 	PanC.TaskSimpleMessage -> TaskSimpleMessageC;
 	PanC.SubscribeTask -> SubscribeTaskC;	
+	PanC.PublishTask -> PublishTaskC;
 
 	PanC.AMPacket -> AMSenderC;
   	PanC.Packet -> AMSenderC;
