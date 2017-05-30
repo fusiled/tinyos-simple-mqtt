@@ -6,19 +6,21 @@
 	#define N_NODES 8
 #endif
 
+#define QOS_NOT_SET 5
+
 #include "printf.h"
 module PanC
 {
 	uses 
 	{
 		interface TaskSimpleMessage;
+		interface SubscribeTask;
 		interface Boot;
 	    	interface AMPacket;
 		interface Packet;
     		interface AMSend;
 	    	interface SplitControl;
-		interface Receive;
-		
+		interface Receive;		
  	}
 }
 implementation
@@ -57,7 +59,7 @@ implementation
 	void handle_connect(uint8_t node_id)
 	{
 		active_node[node_id]=TRUE;
-		printf("[PanC] active_node[%d]=%d\n", node_id, active_node[node_id-1]);
+		//printf("[PanC] active_node[%d]=%d\n", node_id, active_node[node_id-1]);
 		connack_pkt = call Packet.getPayload(&pkt,sizeof(connack_msg_t));
 		build_connack_msg(connack_pkt,node_id);
 		if( call AMSend.send( (node_id+1) ,&pkt, sizeof(connack_msg_t)) == SUCCESS)
@@ -72,6 +74,19 @@ implementation
 		// a timer-killing routine must be implemented
 	}
 
+
+	void handle_suback(uint8_t node_id)
+	{
+		suback_msg_t * suback_pkt;
+                suback_pkt = call Packet.getPayload(&pkt,sizeof(suback_msg_t));
+                build_suback_msg(suback_pkt,node_id);
+                if( call AMSend.send( (node_id+1) ,&pkt, sizeof(suback_msg_t)) == SUCCESS)
+                {
+                        printf("[PanC] Sent SUBACK(%d)\n",node_id);
+                }
+
+	}
+
 	//***************** TaskSimpleMessage Interface ********//
 	event void TaskSimpleMessage.runTask(uint8_t code_id, uint8_t node_id)
 	{
@@ -79,17 +94,29 @@ implementation
 		{
 			case CONNECT_CODE: handle_connect(node_id); break;
 			case PUBACK_CODE: handle_puback(node_id); break;
+			case SUBACK_CODE: handle_suback(node_id); break;
 			default: printf("[PanC] Invalid code_id %d TaskSimpleMessage.runTask\n",code_id);
 		}
 	}
 	//***************** Receive Interface *****************//
 	event message_t * Receive.receive(message_t* msg, void* payload, uint8_t len)
 	{
-		//get the first 8 bits. They always contains code_id and node_id
-		uint8_t chunk=* ((uint8_t*)payload);
-		//consider only the important bits
-		uint8_t code_id=chunk & 7;
-		uint8_t node_id= (chunk & (7<<3))>>3;
+		uint8_t chunk;
+		uint8_t code_id;
+		uint8_t node_id;
+		subscribe_msg_t * sub_msg;
+                uint8_t topic_mask;
+                uint8_t qos_mask;
+		if(len==sizeof(uint8_t))
+		{
+			chunk = *((uint8_t *)payload);
+		}
+		else if(len==sizeof(uint16_t))
+		{
+			chunk = ((uint8_t *)payload)[1];
+		}
+		code_id=chunk & 7;
+		node_id= (chunk >> 3) & 7;
 		printf("[PanC] new msg. code_id: %d, node_id: %d\n", code_id,node_id);
 		switch(code_id)
 		{
@@ -101,7 +128,12 @@ implementation
 				}
 				break;
 			case PUBLISH_CODE: break;
-			case SUBSCRIBE_CODE: break;
+			case SUBSCRIBE_CODE: sub_msg = (subscribe_msg_t *)payload;
+				topic_mask = (*sub_msg >> SUBSCRIBE_TOPIC_MASK_ALIGNMENT) & 7;
+                                qos_mask = (*sub_msg >> SUBSCRIBE_QOS_MASK_ALIGNMENT) & 7;
+                                call SubscribeTask.postTask(code_id,node_id,topic_mask,qos_mask); 
+				break;
+			case SUBACK_CODE: break;
 			default: printf("[PanC] Invalid code %d at Receive.receive\n", code_id);
 		}
   		return msg;
@@ -116,5 +148,17 @@ implementation
 			//TODO continue failure handling with retransmission
     		}
 	}
+
+	event void SubscribeTask.runTask(uint8_t code_id, uint8_t node_id, uint8_t topic_mask, uint8_t qos_mask)
+        {
+		if(active_node[node_id]==TRUE)
+		{
+			topic[node_id]=topic_mask;
+			qos[node_id]=qos_mask;
+			printf("[PanC] set node: %d, topic: %d, qos: %d\n", node_id,topic[node_id],qos[node_id]);
+			call TaskSimpleMessage.postTask(SUBACK_CODE,node_id);
+		}		
+        }
+
 
 }

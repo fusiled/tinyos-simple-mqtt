@@ -8,6 +8,7 @@
 
 #define SENSOR_PERIOD 1024
 #define CONNECT_TIMEOUT 2048
+#define QOS_SEED 157
 #define NODE_ID (TOS_NODE_ID - 1 )
 module NodeC
 {
@@ -32,11 +33,19 @@ implementation
 {
 	bool connected = FALSE;
 	message_t pkt;	
-	uint8_t sensor_selector = 0;
+	uint8_t sensor_selector;
+	uint8_t topic_mask;
+	uint8_t qos_mask;
+
+	task void subscribeTask();	
 
 	//***************** Boot interface ********************//
   	event void Boot.booted() {
-  		connected = FALSE;
+		//init fields  		
+		connected = FALSE;
+		sensor_selector = NODE_ID;
+		topic_mask = NODE_ID;
+		qos_mask = ( QOS_SEED >> NODE_ID ) & 7;
 		call SplitControl.start();
 	}
 
@@ -64,7 +73,7 @@ implementation
 		build_connect_msg(mess,NODE_ID);
 		if(call AMSend.send(PAN_COORDINATOR_ADDRESS,&pkt,sizeof(connect_msg_t)) == SUCCESS)
 		{
-			printf("[Node %d] CONNECT(%d) sent\n",NODE_ID,NODE_ID);
+			printf("[Node %d] CONNECT sent\n",NODE_ID);
 			call TimeoutTimer.startOneShot(CONNECT_TIMEOUT);
 		}
 	}
@@ -96,10 +105,13 @@ implementation
 		{
 			case CONNACK_CODE: printf("[Node %d] CONNACK received!\n", NODE_ID);
 				connected=TRUE;
-				call SensorTimer.startPeriodic(SENSOR_PERIOD); 
+				call SensorTimer.startPeriodic(SENSOR_PERIOD);
+				post subscribeTask(); 
 				break;
 			case PUBLISH_CODE: break;
-			case SUBSCRIBE_CODE: break;
+			case SUBACK_CODE: 
+				printf("[Node %d], SUBACK received!\n",NODE_ID);
+				break;
 		}
   		return msg;
 	}
@@ -171,5 +183,17 @@ implementation
 			printf("[Node %d] CONNACK not received. Retrying...\n",NODE_ID);
 			call TaskSimpleMessage.postTask(CONNECT_CODE,NODE_ID);
 		}
+	}
+
+
+	task void subscribeTask()
+	{
+		subscribe_msg_t * mess = call Packet.getPayload(&pkt,sizeof(subscribe_msg_t));
+                build_subscribe_msg(mess,NODE_ID,topic_mask,qos_mask);
+                if(call AMSend.send(PAN_COORDINATOR_ADDRESS,&pkt,sizeof(subscribe_msg_t)) == SUCCESS)
+                {
+                        printf("[Node %d] SUBSCRIBE(%d,%d) sent\n",NODE_ID,topic_mask,qos_mask);
+                }
+
 	}
 }
