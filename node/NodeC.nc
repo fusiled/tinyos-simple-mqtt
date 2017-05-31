@@ -23,10 +23,10 @@ module NodeC
 		interface PublishTask as SendPublishTask;
 		interface PubAckTask as SendPubAckTask;
 		interface Boot;
-	    	interface AMPacket;
+	    interface AMPacket;
 		interface Packet;
-    		interface AMSend;
-	    	interface SplitControl;
+    	interface AMSend;
+	    interface SplitControl;
 		interface Receive;
 
 		//Sensors
@@ -49,12 +49,13 @@ implementation
 	uint8_t qos_mask;
 	uint8_t timeout_type;
 	uint8_t publish_id=1;
-        bool publish_qos;
+    bool publish_qos;
 
 	task void subscribeTask();	
 
 	//***************** Boot interface ********************//
-  	event void Boot.booted() {
+  	event void Boot.booted() 
+  	{
 		//init fields  		
 		connected = FALSE;
 		sensor_selector = NODE_ID;
@@ -65,10 +66,10 @@ implementation
 	}
 
 
-        //*********** SplitControl interface ******************//
+    //*********** SplitControl interface ******************//
 	event void SplitControl.startDone(error_t err)
 	{
-    		if(err == SUCCESS) 
+    	if(err == SUCCESS) 
 		{
 	  		printf("[Node %d] READY! Connecting to PanCoordinator\n",NODE_ID);
 			call TaskSimpleMessage.postTask(CONNECT_CODE,NODE_ID);
@@ -79,7 +80,7 @@ implementation
 		}
 	}
 
-	event void SplitControl.stopDone(error_t err){}
+	event void SplitControl.stopDone(error_t err){ /**do nothing/}
 
 	//***************** Message Handlers *****************//
 	void handle_connect()
@@ -112,55 +113,56 @@ implementation
 	event message_t* Receive.receive(message_t* msg, void* payload, uint8_t len)
 	{
  		uint8_t chunk;
-                uint8_t code_id;
+        uint8_t code_id;
 		uint8_t node_id;
 		uint8_t publish_topic;
-                if(len==sizeof(uint8_t))
-                {
-                        chunk = *((uint8_t *)payload);
-                }
-                else if(len==sizeof(subscribe_msg_t))
-                {
-                        chunk = ((uint8_t *)payload)[1];
-                }
-                else if(len==sizeof(publish_msg_t))
-                {
-                        publish_msg_t * pub_msg = (publish_msg_t *) payload;
-                        chunk = pub_msg->header;
-                }
-                else
-                {
-                        printf("[PanC] arrived a packet of wrong size!\n");
-                        return msg;
-                }
-                code_id=chunk & 7;
-                node_id= (chunk >> 3) & 7;
+        if(len==sizeof(suback_msg_t) || len==sizeof(connect_msg_t)|| len==sizeof(connack_msg_t))
+        {
+            chunk = *((uint8_t *)payload);
+        }
+        else if(len==sizeof(subscribe_msg_t) || len==sizeof(puback_msg_t))
+        {
+            chunk = ((uint8_t *)payload)[1];
+        }
+        else if(len==sizeof(publish_msg_t))
+        {
+            publish_msg_t * pub_msg = (publish_msg_t *) payload;
+            chunk = pub_msg->header;
+        }
+        else
+        {
+            printf("[PanC] Reception of a wrong size ):\n");
+            return msg;
+        }
+        code_id=chunk & CODE_ID_MASK;
+        node_id= (chunk >> GENERAL_NODE_ID_ALIGNMENT) & NODE_ID_MASK;
 		printf("[Node %d] received message. code_id: %d, node_id: %d\n", NODE_ID,code_id,node_id);
 		switch(code_id)
 		{
-			case CONNACK_CODE: call TimeoutTimer.stop(); 
+			case CONNACK_CODE:
+				call TimeoutTimer.stop(); 
 				printf("[Node %d] CONNACK received!\n", NODE_ID);
 				connected=TRUE;
 				call SensorTimer.startPeriodic(SENSOR_PERIOD);
 				post subscribeTask(); 
-				break;
+			break;
 			case PUBLISH_CODE:
 				printf("[Node %d] PUBLISH received!\n",NODE_ID);
 				//send puback back
 				publish_topic = chunk>>PUBLISH_TOPIC_ALIGNMENT;
 				if ( ((qos_mask>>publish_topic)&1)==1)
-					{
-						uint8_t panc_publish_id =  ((publish_msg_t *)payload)->publish_id; 
-						call SendPubAckTask.postTask(NODE_ID,publish_topic,panc_publish_id);
-					} 
-				break;
+				{
+					uint8_t panc_publish_id =  ((publish_msg_t *)payload)->publish_id; 
+					call SendPubAckTask.postTask(NODE_ID,publish_topic,panc_publish_id);
+				} 
+			break;
 			case SUBACK_CODE:
 				call TimeoutTimer.stop(); 
 				printf("[Node %d] SUBACK received!\n",NODE_ID);
-				break;
+			break;
 			case PUBACK_CODE:
 				printf("[Node %d] PUBACK Received!\n",NODE_ID);
-				break;
+			break;
 		}
   		return msg;
 	}
@@ -172,35 +174,35 @@ implementation
 		{
 			printf("[Node %d] Failed msg transmission retrying...\n", NODE_ID);
 			//TODO continue failure handling with retransmission
-    		}
+    	}
 	}
 
 	//************************* Read interfaces **********************//
 	 event void TemperatureRead.readDone(error_t result, uint16_t data)
 	{
 		if(result==SUCCESS)
-                {
-                        //printf("[Node %d] TEM: %d\n", NODE_ID,data);
+        {
+            //printf("[Node %d] TEM: %d\n", NODE_ID,data);
 			call SendPublishTask.postTask(NODE_ID,publish_qos,publish_id,TEMPERATURE_ID, data>>1 );
-                }
-                else
-                {
-                        printf("[Node %d] TEM: FAIL\n",NODE_ID);
-                }
+        }
+        else
+        {
+            printf("[Node %d] TEM: FAIL\n",NODE_ID);
+        }
 
 	}
 
 	event void HumidityRead.readDone(error_t result, uint16_t data)
 	{
 		if(result==SUCCESS)
-                {
+        {
 			call SendPublishTask.postTask(NODE_ID,publish_qos,publish_id,HUMIDITY_ID, data>>1 );
-                        //printf("[Node %d] HUM: %d\n", NODE_ID,data);
-                }
-                else
-                {
-                        printf("[Node %d] HUM: FAIL\n",NODE_ID);
-                }
+            //printf("[Node %d] HUM: %d\n", NODE_ID,data);
+        }
+        else
+        {
+            printf("[Node %d] HUM: FAIL\n",NODE_ID);
+        }
 
 	}
 
@@ -221,9 +223,9 @@ implementation
 	{
 		switch(sensor_selector%3)
 		{
-			case 0: call TemperatureRead.read(); break;
-			case 1: call HumidityRead.read(); break;
-			case 2: call LuminosityRead.read(); break;
+			case TEMPERATURE_ID: call TemperatureRead.read(); break;
+			case HUMIDITY_ID: call HumidityRead.read(); break;
+			case LUMINOSITY_ID: call LuminosityRead.read(); break;
 		}
 		sensor_selector++;
 	}
@@ -238,10 +240,10 @@ implementation
                 		        printf("[Node %d] CONNACK not received. Retrying...\n",NODE_ID);
                         		call TaskSimpleMessage.postTask(CONNECT_CODE,NODE_ID);
                 		}
-				break;
+			break;
 			case SUBSCRIBE_CODE:
 				post subscribeTask();
-				break;
+			break;
 		}
 	}
 
@@ -249,37 +251,35 @@ implementation
 	task void subscribeTask()
 	{
 		subscribe_msg_t * mess = call Packet.getPayload(&pkt,sizeof(subscribe_msg_t));
-                build_subscribe_msg(mess,NODE_ID,topic_mask,qos_mask);
-                if(call AMSend.send(PAN_COORDINATOR_ADDRESS,&pkt,sizeof(subscribe_msg_t)) == SUCCESS)
-                {
+        build_subscribe_msg(mess,NODE_ID,topic_mask,qos_mask);
+        if(call AMSend.send(PAN_COORDINATOR_ADDRESS,&pkt,sizeof(subscribe_msg_t)) == SUCCESS)
+        {
 			timeout_type=SUBSCRIBE_CODE;
 			call TimeoutTimer.startOneShot(CONNECT_TIMEOUT);
-                        printf("[Node %d] SUBSCRIBE(%d,%d) sent\n",NODE_ID,topic_mask,qos_mask);
-                }
-
+            printf("[Node %d] SUBSCRIBE(%d,%d) sent\n",NODE_ID,topic_mask,qos_mask);
+        }
 	}
 
 
 	event void SendPublishTask.runTask(uint8_t node_id, uint8_t qos, uint8_t node_publish_id, uint8_t topic, uint16_t payload)
 	{
 		publish_msg_t * mess = call Packet.getPayload(&pkt,sizeof(publish_msg_t));
-                build_publish_msg(mess,NODE_ID,qos,node_publish_id,topic,payload);
-                if(call AMSend.send(PAN_COORDINATOR_ADDRESS,&pkt,sizeof(publish_msg_t)) == SUCCESS)
-                {
-                        printf("[Node %d] PUBLISH(qos:%d,node_publish_id:%d,topic:%d,payload:%d) sent\n",NODE_ID,qos,node_publish_id,topic,payload);
+        build_publish_msg(mess,NODE_ID,qos,node_publish_id,topic,payload);
+        if(call AMSend.send(PAN_COORDINATOR_ADDRESS,&pkt,sizeof(publish_msg_t)) == SUCCESS)
+        {
+            printf("[Node %d] PUBLISH(qos:%d,node_publish_id:%d,topic:%d,payload:%d) sent\n",NODE_ID,qos,node_publish_id,topic,payload);
 			publish_id++;
-                }
+        }
 	}
 	
 	event void SendPubAckTask.runTask(uint8_t node_id, uint8_t panc_publish_topic,uint8_t panc_publish_id)
+    {
+        puback_msg_t * mess = call Packet.getPayload(&pkt,sizeof(puback_msg_t));
+        build_puback_msg(mess,NODE_ID,panc_publish_topic,panc_publish_id);
+        if(call AMSend.send(PAN_COORDINATOR_ADDRESS,&pkt,sizeof(puback_msg_t)) == SUCCESS)
         {
-                puback_msg_t * mess = call Packet.getPayload(&pkt,sizeof(puback_msg_t));
-                build_puback_msg(mess,NODE_ID,panc_publish_topic,panc_publish_id);
-                if(call AMSend.send(PAN_COORDINATOR_ADDRESS,&pkt,sizeof(puback_msg_t)) == SUCCESS)
-                {
-                        printf("[Node %d] PUBACK(publish_id:%d,topic:%d) sent\n",NODE_ID,panc_publish_id,panc_publish_topic);
-                        publish_id++;
-                }
+            printf("[Node %d] PUBACK(publish_id:%d,topic:%d) sent\n",NODE_ID,panc_publish_id,panc_publish_topic);
         }
+    }
 
 }
