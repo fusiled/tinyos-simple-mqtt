@@ -15,12 +15,13 @@ AM_MY_MSG = 6,
 typedef nx_uint16_t subscribe_msg_t;
 
 typedef nx_uint8_t suback_msg_t;
-typedef nx_uint8_t puback_msg_t;
+typedef nx_uint16_t puback_msg_t;
 typedef nx_uint8_t connect_msg_t;
 typedef nx_uint8_t connack_msg_t;
 typedef nx_struct publish_msg_struct
 {
 	nx_uint8_t header;
+	nx_uint8_t publish_id;
 	nx_uint16_t payload;
 } publish_msg_t;
 
@@ -38,19 +39,20 @@ typedef nx_struct publish_msg_struct
 #define PUBLISH_CODE 3
 #define PUBLISH_NODE_ID_ALIGNMENT GENERAL_NODE_ID_ALIGNMENT
 #define PUBLISH_TOPIC_ALIGNMENT (PUBLISH_NODE_ID_ALIGNMENT + 3)
+#define PUBLISH_ID_ALIGNMENT (0)
 #define PUBLISH_QOS_ALIGNMENT ( 0 )
 #define PUBLISH_PAYLOAD_ALIGNMENT  (PUBLISH_QOS_ALIGNMENT + 1)
-void build_publish_msg(publish_msg_t * msg,uint8_t node_id,bool qos,uint8_t topic,uint16_t payload)
+void build_publish_msg(publish_msg_t * msg,uint8_t node_id,bool qos,uint8_t publish_id ,uint8_t topic,uint16_t payload)
 {
 	msg->header=PUBLISH_CODE;
 	msg->header|=node_id<<PUBLISH_NODE_ID_ALIGNMENT;
 	msg->header|=topic<<PUBLISH_TOPIC_ALIGNMENT;
+	msg->publish_id=publish_id<<PUBLISH_ID_ALIGNMENT;
 	msg->payload=qos<<PUBLISH_QOS_ALIGNMENT;
 	//cut additional bit. We can use only at most 15 bits of payload
 	payload=(payload<<1)>>1;
 	msg->payload|=payload<<PUBLISH_PAYLOAD_ALIGNMENT;
 }
-
 
 #define SUBSCRIBE_CODE 5
 #define SUBSCRIBE_NODE_ID_ALIGNMENT (GENERAL_NODE_ID_ALIGNMENT)
@@ -58,10 +60,10 @@ void build_publish_msg(publish_msg_t * msg,uint8_t node_id,bool qos,uint8_t topi
 #define SUBSCRIBE_QOS_MASK_ALIGNMENT (SUBSCRIBE_TOPIC_MASK_ALIGNMENT + 3 + 1)
 void build_subscribe_msg(subscribe_msg_t * msg,uint8_t node_id,uint8_t topic_mask, uint8_t qos_mask)
 {
-	*msg=SUBSCRIBE_CODE;
-	*msg|=node_id<<SUBSCRIBE_NODE_ID_ALIGNMENT;
-	*msg|=topic_mask<<SUBSCRIBE_TOPIC_MASK_ALIGNMENT;
-	*msg|=qos_mask<<SUBSCRIBE_QOS_MASK_ALIGNMENT;
+	*msg=(SUBSCRIBE_CODE & 7);
+	*msg|=(node_id & 7)<<SUBSCRIBE_NODE_ID_ALIGNMENT;
+	*msg|=(topic_mask & 7)<<SUBSCRIBE_TOPIC_MASK_ALIGNMENT;
+	*msg|=(qos_mask & 7)<<SUBSCRIBE_QOS_MASK_ALIGNMENT;
 }
 
 
@@ -83,10 +85,14 @@ void build_connack_msg(connack_msg_t * msg, uint8_t node_id)
 
 #define PUBACK_CODE 4
 #define PUBACK_NODE_ID_ALIGNMENT (GENERAL_NODE_ID_ALIGNMENT)
-void build_puback_msg(puback_msg_t * msg,uint8_t node_id)
+#define PUBACK_TOPIC_ALIGNMENT (PUBACK_NODE_ID_ALIGNMENT + 3)
+#define PUBACK_ID_ALIGNMENT (PUBACK_TOPIC_ALIGNMENT + 2)
+void build_puback_msg(puback_msg_t * msg,uint8_t node_id,uint8_t topic, uint8_t publish_id)
 {
 	*msg=PUBACK_CODE;
 	*msg|=node_id<<PUBACK_NODE_ID_ALIGNMENT;
+	*msg|=topic<<PUBACK_TOPIC_ALIGNMENT;
+	*msg|=publish_id<<PUBACK_ID_ALIGNMENT;
 }
 
 #define SUBACK_CODE 6

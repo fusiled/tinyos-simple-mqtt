@@ -20,7 +20,8 @@ module NodeC
 	uses 
 	{
 		interface TaskSimpleMessage;
-		interface PublishTask;
+		interface PublishTask as SendPublishTask;
+		interface PubAckTask as SendPubAckTask;
 		interface Boot;
 	    	interface AMPacket;
 		interface Packet;
@@ -47,6 +48,7 @@ implementation
 	uint8_t topic_mask;
 	uint8_t qos_mask;
 	uint8_t timeout_type;
+	uint8_t publish_id=1;
         bool publish_qos;
 
 	task void subscribeTask();	
@@ -109,11 +111,30 @@ implementation
 	//***************** Receive Interface *****************//
 	event message_t* Receive.receive(message_t* msg, void* payload, uint8_t len)
 	{
-		//get the first 8 bits. They always contains code_id and node_id
-		uint8_t chunk=* ((uint8_t*)payload);
-		//consider only the important bits
-		uint8_t code_id=chunk & 7;
-		uint8_t node_id= (chunk & (7<<3))>>3;
+ 		uint8_t chunk;
+                uint8_t code_id;
+		uint8_t node_id;
+		uint8_t publish_topic;
+                if(len==sizeof(uint8_t))
+                {
+                        chunk = *((uint8_t *)payload);
+                }
+                else if(len==sizeof(subscribe_msg_t))
+                {
+                        chunk = ((uint8_t *)payload)[1];
+                }
+                else if(len==sizeof(publish_msg_t))
+                {
+                        publish_msg_t * pub_msg = (publish_msg_t *) payload;
+                        chunk = pub_msg->header;
+                }
+                else
+                {
+                        printf("[PanC] arrived a packet of wrong size!\n");
+                        return msg;
+                }
+                code_id=chunk & 7;
+                node_id= (chunk >> 3) & 7;
 		printf("[Node %d] received message. code_id: %d, node_id: %d\n", NODE_ID,code_id,node_id);
 		switch(code_id)
 		{
@@ -123,10 +144,22 @@ implementation
 				call SensorTimer.startPeriodic(SENSOR_PERIOD);
 				post subscribeTask(); 
 				break;
-			case PUBLISH_CODE: break;
+			case PUBLISH_CODE:
+				printf("[Node %d] PUBLISH received!\n",NODE_ID);
+				//send puback back
+				publish_topic = chunk>>PUBLISH_TOPIC_ALIGNMENT;
+				if ( ((qos_mask>>publish_topic)&1)==1)
+					{
+						uint8_t panc_publish_id =  ((publish_msg_t *)payload)->publish_id; 
+						call SendPubAckTask.postTask(NODE_ID,publish_topic,panc_publish_id);
+					} 
+				break;
 			case SUBACK_CODE:
 				call TimeoutTimer.stop(); 
-				printf("[Node %d], SUBACK received!\n",NODE_ID);
+				printf("[Node %d] SUBACK received!\n",NODE_ID);
+				break;
+			case PUBACK_CODE:
+				printf("[Node %d] PUBACK Received!\n",NODE_ID);
 				break;
 		}
   		return msg;
@@ -148,7 +181,7 @@ implementation
 		if(result==SUCCESS)
                 {
                         //printf("[Node %d] TEM: %d\n", NODE_ID,data);
-			call PublishTask.postTask(NODE_ID,publish_qos,TEMPERATURE_ID, data>>1 );
+			call SendPublishTask.postTask(NODE_ID,publish_qos,publish_id,TEMPERATURE_ID, data>>1 );
                 }
                 else
                 {
@@ -161,7 +194,7 @@ implementation
 	{
 		if(result==SUCCESS)
                 {
-			//call PublishTask.postTask(NODE_ID,publish_qos,HUMIDITY_ID, data>>1 );
+			call SendPublishTask.postTask(NODE_ID,publish_qos,publish_id,HUMIDITY_ID, data>>1 );
                         //printf("[Node %d] HUM: %d\n", NODE_ID,data);
                 }
                 else
@@ -175,7 +208,7 @@ implementation
 	{
 		if(result==SUCCESS)
 		{
-			//call PublishTask.postTask(NODE_ID,publish_qos,LUMINOSITY_ID, data>>1 );
+			call SendPublishTask.postTask(NODE_ID,publish_qos,publish_id,LUMINOSITY_ID, data>>1 );
 			//printf("[Node %d] LUM: %d\n", NODE_ID,data);
 		}
 		else
@@ -227,15 +260,26 @@ implementation
 	}
 
 
-	 event void PublishTask.runTask(uint8_t node_id, uint8_t qos, uint8_t topic, uint16_t payload)
+	event void SendPublishTask.runTask(uint8_t node_id, uint8_t qos, uint8_t node_publish_id, uint8_t topic, uint16_t payload)
 	{
 		publish_msg_t * mess = call Packet.getPayload(&pkt,sizeof(publish_msg_t));
-                build_publish_msg(mess,NODE_ID,qos,topic,payload);
+                build_publish_msg(mess,NODE_ID,qos,node_publish_id,topic,payload);
                 if(call AMSend.send(PAN_COORDINATOR_ADDRESS,&pkt,sizeof(publish_msg_t)) == SUCCESS)
                 {
-                        timeout_type=PUBLISH_CODE;
-                        call TimeoutTimer.startOneShot(CONNECT_TIMEOUT);
-                        printf("[Node %d] PUBLISH(%d,%d,%d) sent\n",NODE_ID,qos,topic,payload);
+                        printf("[Node %d] PUBLISH(qos:%d,node_publish_id:%d,topic:%d,payload:%d) sent\n",NODE_ID,qos,node_publish_id,topic,payload);
+			publish_id++;
                 }
 	}
+	
+	event void SendPubAckTask.runTask(uint8_t node_id, uint8_t panc_publish_topic,uint8_t panc_publish_id)
+        {
+                puback_msg_t * mess = call Packet.getPayload(&pkt,sizeof(puback_msg_t));
+                build_puback_msg(mess,NODE_ID,panc_publish_topic,panc_publish_id);
+                if(call AMSend.send(PAN_COORDINATOR_ADDRESS,&pkt,sizeof(puback_msg_t)) == SUCCESS)
+                {
+                        printf("[Node %d] PUBACK(publish_id:%d,topic:%d) sent\n",NODE_ID,panc_publish_id,panc_publish_topic);
+                        publish_id++;
+                }
+        }
+
 }

@@ -14,7 +14,8 @@ implementation
         components ActiveMessageC;
 
 	components TaskSimpleMessageC;
-	components PublishTaskC;
+	components PublishTaskC as SendPublishTaskC;
+	components PubAckTaskC as SendPubAckTaskC;
 
 	components new TimerMilliC() as SensorTimerC;
 	components new TimerMilliC() as TimeoutTimerC;
@@ -36,8 +37,8 @@ implementation
         NodeC.Packet -> AMSenderC;
 
 	NodeC.TaskSimpleMessage -> TaskSimpleMessageC;
-	NodeC.PublishTask -> PublishTaskC;	
-
+	NodeC.SendPublishTask -> SendPublishTaskC;	
+	NodeC.SendPubAckTask -> SendPubAckTaskC;
 
 	NodeC.TemperatureRead -> TemperatureSensor;
 	NodeC.HumidityRead -> HumiditySensor;

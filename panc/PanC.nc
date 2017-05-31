@@ -7,6 +7,9 @@
 #endif
 
 #include "printf.h"
+
+#define PUBACK_BUFFER_SIZE 256
+
 module PanC
 {
 	uses 
@@ -27,8 +30,13 @@ implementation
 	bool active_node[N_NODES];
 	uint8_t qos[N_NODES];
 	uint8_t topic[N_NODES];
+	uint8_t last_publish_id_received[N_NODES];
 	message_t pkt;	
-	connack_msg_t * connack_pkt;
+	uint8_t publish_buffer_id[PUBACK_BUFFER_SIZE];
+	uint8_t publish_buffer_node[PUBACK_BUFFER_SIZE];
+	publish_msg_t publish_buffer_msg[PUBACK_BUFFER_SIZE];
+	uint8_t publish_buffer_head = 0;
+	uint8_t publish_id = 0;
 
 	//***************** Boot interface ********************//
   	event void Boot.booted()
@@ -57,6 +65,7 @@ implementation
 	//***************** Message Handlers *****************//
 	void handle_connect(uint8_t node_id)
 	{
+		connack_msg_t * connack_pkt;
 		active_node[node_id]=TRUE;
 		//printf("[PanC] active_node[%d]=%d\n", node_id, active_node[node_id-1]);
 		connack_pkt = call Packet.getPayload(&pkt,sizeof(connack_msg_t));
@@ -69,8 +78,6 @@ implementation
 
 	void handle_puback(uint8_t node_id)
 	{
-		//TODO at the moment, do nothing.
-		// a timer-killing routine must be implemented
 	}
 
 
@@ -109,11 +116,12 @@ implementation
 		uint8_t publish_qos;
 		uint16_t publish_payload;
 		uint8_t publish_topic;
+		uint8_t node_publish_id;
 		if(len==sizeof(uint8_t))
 		{
 			chunk = *((uint8_t *)payload);
 		}
-		else if(len==sizeof(subscribe_msg_t))
+		else if(len==sizeof(subscribe_msg_t) || len==sizeof(puback_msg_t))
 		{
 			chunk = ((uint8_t *)payload)[1];
 		}
@@ -131,8 +139,11 @@ implementation
 		node_id= (chunk >> 3) & 7;
 		printf("[PanC] new msg. code_id: %d, node_id: %d\n", code_id,node_id);
 		switch(code_id)
-		{
-			case PUBACK_CODE: //use CONNECT_CODE case
+		{	
+			case PUBACK_CODE: 
+				node_publish_id=((puback_msg_t)payload)>>PUBACK_ID_ALIGNMENT;
+				printf("[PanC] PUBACK(nid:%d,id:%d) received\n",node_id, node_publish_id); 
+				break;
 			case CONNECT_CODE:
 				if(call TaskSimpleMessage.postTask(code_id,node_id)!=SUCCESS)
 				{
@@ -143,8 +154,9 @@ implementation
 				publish_qos =( ((publish_msg_t *)payload)->payload ) & 1;
 				publish_topic = chunk >> PUBLISH_TOPIC_ALIGNMENT;
 				publish_payload = ( ((publish_msg_t *)payload)->payload )>>1; 
-				call PublishTask.postTask(node_id,publish_qos,publish_topic,publish_payload);
-				 break;
+				node_publish_id = ((publish_msg_t *)payload)->publish_id;
+				call PublishTask.postTask(node_id,publish_qos,node_publish_id,publish_topic,publish_payload);
+				break;
 			case SUBSCRIBE_CODE: sub_msg = (subscribe_msg_t *)payload;
 				topic_mask = (*sub_msg >> SUBSCRIBE_TOPIC_MASK_ALIGNMENT) & 7;
                                 qos_mask = (*sub_msg >> SUBSCRIBE_QOS_MASK_ALIGNMENT) & 7;
@@ -178,9 +190,49 @@ implementation
         }
 
 
-	event void PublishTask.runTask(uint8_t node_id, uint8_t publish_qos,uint8_t publish_topic,uint16_t publish_payload)
+	event void PublishTask.runTask(uint8_t node_id, uint8_t publish_qos,uint8_t node_publish_id, uint8_t publish_topic,uint16_t publish_payload)
 	{
-		printf("[PanC] PUBLISH from node %d. qos: %d, topic: %d, payload: %d\n", node_id,publish_qos,publish_topic,publish_payload);
+		uint8_t iterator;
+		//send PUBACK to node
+		if(publish_qos==1)
+		{
+                        puback_msg_t * puback_pkt = call Packet.getPayload(&pkt,sizeof(puback_msg_t));
+                        build_puback_msg(puback_pkt,PAN_COORDINATOR_ADDRESS,publish_topic,node_publish_id);
+                        if( call AMSend.send( (node_id+1) ,&pkt, sizeof(puback_msg_t)) == SUCCESS)
+                        {
+                                printf("[PanC] Sent PUBACK(nid:%d, node_pub_id: %d)\n",node_id, node_publish_id);
+			}		
+		}
+		//this is a new received publish from node_id
+		if(last_publish_id_received[node_id]<node_publish_id)
+		{
+			last_publish_id_received[node_id]=node_publish_id;
+			for(iterator=0; iterator<N_NODES; iterator++)
+			{
+				uint8_t iter_topic = topic[iterator];
+				if(iterator!=node_id && active_node[iterator]==TRUE && ( (iter_topic >> publish_topic) & 1 )==1)
+				{
+					//send publish to that node
+					uint8_t sending_qos;
+					publish_msg_t * mess = call Packet.getPayload(&pkt,sizeof(publish_msg_t));
+			                sending_qos = (qos[iterator]>>publish_topic) & 1;
+					build_publish_msg(mess,node_id,sending_qos,publish_id,publish_topic,publish_payload);
+	               			if(call AMSend.send( (iterator+1),&pkt,sizeof(publish_msg_t)) == SUCCESS)
+                			{
+	      	                		printf("[PanC] SENT PUBLISH %d->%d. pub_id: %d, qos: %d, topic: %d, payload: %d\n",node_id,iterator,
+							publish_id, sending_qos,publish_topic,publish_payload);
+                			}
+					if(qos[iterator]==TRUE)
+					{
+						publish_buffer_id[publish_buffer_head]=publish_id;
+						publish_buffer_node[publish_buffer_head]=iterator;
+						publish_buffer_msg[publish_buffer_head]=*mess;
+						publish_buffer_head++;
+					}
+				}
+			}
+		}
+		publish_id++;
 	}
 
 }
