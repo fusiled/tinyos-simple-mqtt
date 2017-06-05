@@ -8,8 +8,9 @@
 
 #include "printf.h"
 
-module PanC {
-	uses
+module PanC
+{
+	uses 
 	{
 		interface TaskSimpleMessage;
 		interface PublishTask;
@@ -19,16 +20,17 @@ module PanC {
 		interface Packet;
     	interface AMSend;
 	    interface SplitControl;
-		interface Receive;
+		interface Receive;		
  	}
 }
-implementation {
+implementation
+{
 	bool active_node[N_NODES];
 	uint8_t qos[N_NODES];
 	uint8_t topic[N_NODES];
 	uint8_t last_publish_id_received[N_NODES];
 	uint8_t publish_id = 0;
-	message_t pkt;
+	message_t pkt;	
 
 	//***************** Boot interface ********************//
   	event void Boot.booted()
@@ -40,7 +42,7 @@ implementation {
         //*********** SplitControl interface ******************//
 	event void SplitControl.startDone(error_t err)
 	{
-   		if(err == SUCCESS)
+   		if(err == SUCCESS) 
 		{
 	  		printf("[PanC] Ready!\n");
  		}
@@ -67,7 +69,7 @@ implementation {
 
 	void handle_puback(uint8_t node_id,uint8_t node_publish_id)
 	{
-		printf("[PanC] PUBACK(nid:%d,id:%d) received\n",node_id, node_publish_id);
+		printf("[PanC] PUBACK(nid:%d,id:%d) received\n",node_id, node_publish_id); 
 	}
 
 
@@ -89,6 +91,7 @@ implementation {
 		switch(code_id)
 		{
 			case CONNECT_CODE: handle_connect(node_id); break;
+			case PUBACK_CODE: handle_puback(node_id); break;
 			case SUBACK_CODE: handle_suback(node_id); break;
 			default: printf("[PanC] Invalid code_id %d TaskSimpleMessage.runTask\n",code_id);
 		}
@@ -128,8 +131,8 @@ implementation {
         node_id= (chunk >> GENERAL_NODE_ID_ALIGNMENT) & NODE_ID_MASK;
 		printf("[PanC] new msg. code_id: %d, node_id: %d\n", code_id,node_id);
 		switch(code_id)
-		{
-			case PUBACK_CODE:
+		{	
+			case PUBACK_CODE: 
 				node_publish_id=((puback_msg_t)payload)>>PUBACK_ID_ALIGNMENT;
 				handle_puback(node_id,node_publish_id);
 			break;
@@ -142,7 +145,7 @@ implementation {
 			case PUBLISH_CODE:
 				publish_qos =( ((publish_msg_t *)payload)->payload ) & 1;
 				publish_topic = chunk >> PUBLISH_TOPIC_ALIGNMENT;
-				publish_payload = ( ((publish_msg_t *)payload)->payload )>>1;
+				publish_payload = ( ((publish_msg_t *)payload)->payload )>>1; 
 				node_publish_id = ((publish_msg_t *)payload)->publish_id;
 				call PublishTask.postTask(node_id,publish_qos,node_publish_id,publish_topic,publish_payload);
 			break;
@@ -150,7 +153,7 @@ implementation {
 				sub_msg = (subscribe_msg_t *)payload;
 				topic_mask = (*sub_msg >> SUBSCRIBE_TOPIC_MASK_ALIGNMENT) & SUBSCRIBE_TOPIC_MASK;
                 qos_mask = (*sub_msg >> SUBSCRIBE_QOS_MASK_ALIGNMENT) & SUBSCRIBE_QOS_MASK;
-                call SubscribeTask.postTask(node_id,topic_mask,qos_mask);
+                call SubscribeTask.postTask(node_id,topic_mask,qos_mask); 
 			break;
 			default: printf("[PanC] Invalid code %d at Receive.receive\n", code_id);
 		}
@@ -158,7 +161,7 @@ implementation {
 	}
 
 	//*************** AMSend Interface ************************//
-	event void AMSend.sendDone(message_t* buf,error_t err)
+	event void AMSend.sendDone(message_t* buf,error_t err) 
 	{
 		if(err != SUCCESS )
 		{

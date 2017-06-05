@@ -59,10 +59,8 @@ implementation
 		//init fields  		
 		connected = FALSE;
 		sensor_selector = NODE_ID;
-		//topic_mask = NODE_ID;
-		topic_mask = 1;
-		qos_mask = 1;
-		//qos_mask = ( QOS_SEED >> NODE_ID ) & 7;
+		topic_mask = NODE_ID;
+		qos_mask = ( QOS_SEED >> NODE_ID ) & 7;
 		publish_qos = NODE_ID % 2;
 		call SplitControl.start();
 	}
@@ -82,7 +80,7 @@ implementation
 		}
 	}
 
-	event void SplitControl.stopDone(error_t err){ /**do nothing*/}
+	event void SplitControl.stopDone(error_t err){ /**do nothing/}
 
 	//***************** Message Handlers *****************//
 	void handle_connect()
