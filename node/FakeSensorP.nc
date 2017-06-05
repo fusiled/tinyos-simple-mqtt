@@ -4,24 +4,25 @@
  *
  *  @author Luca Pietro Borsani
  */
- 
+
 generic module FakeSensorP() {
 
-	provides interface Read<uint16_t>;
-	
-	uses interface Random;
-	uses interface Timer<TMilli> as Timer0;
+    provides interface Read<uint16_t>;
 
-} implementation {
+    uses interface Random;
+    uses interface Timer<TMilli> as Timer0;
 
-	//***************** Boot interface ********************//
-	command error_t Read.read(){
-		call Timer0.startOneShot( 10 );
-		return SUCCESS;
-	}
+}
+implementation {
 
-	//***************** Timer0 interface ********************//
-	event void Timer0.fired() {
-		signal Read.readDone( SUCCESS, call Random.rand16() );
-	}
+    //***************** Boot interface ********************//
+    command error_t Read.read() {
+        call Timer0.startOneShot( 10 );
+        return SUCCESS;
+    }
+
+    //***************** Timer0 interface ********************//
+    event void Timer0.fired() {
+        signal Read.readDone( SUCCESS, call Random.rand16() );
+    }
 }
