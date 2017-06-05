@@ -171,6 +171,7 @@ implementation
         case PUBACK_CODE:
             printf("[Node %d] PUBACK Received!\n",NODE_ID);
             break;
+	default: printf("[Node %d] ERROR invalid code_id %d received",NODE_ID,code_id );
         }
         return msg;
     }
@@ -182,7 +183,7 @@ implementation
 	   {
 		if(call AMSend.send(PAN_COORDINATOR_ADDRESS,buf,call Packet.payloadLength(buf)) == SUCCESS)
 	        {
-           		printf("[Node %d] *Resent* Packet\n",NODE_ID);
+           		//printf("[Node %d] *Resent* Packet\n",NODE_ID);
        		}
 	   }
     }
