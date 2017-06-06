@@ -241,7 +241,7 @@ implementation {
         if(publish_qos==1)
         {
             puback_msg_t * puback_pkt = call Packet.getPayload(&pkt,sizeof(puback_msg_t));
-            build_puback_msg(puback_pkt,PAN_COORDINATOR_ADDRESS,publish_topic,node_publish_id);
+            build_puback_msg(puback_pkt,node_id,publish_topic,node_publish_id);
             call PacketAcknowledgements.requestAck(&pkt);
             if( call AMSend.send( (node_id+1) ,&pkt, sizeof(puback_msg_t)) == SUCCESS)
             {
