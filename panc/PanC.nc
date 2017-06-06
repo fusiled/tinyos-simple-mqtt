@@ -43,7 +43,8 @@ implementation {
     {
         if(err == SUCCESS)
         {
-            printf("[PanC] Ready!\n");
+            printf("[PanC] Ready\n");
+	    printf("SIZE: connect: %u, publish: %u, puback: %u\n",sizeof(connect_msg_t),sizeof(publish_msg_t),sizeof(puback_msg_t));
         }
         else
         {
@@ -62,7 +63,7 @@ implementation {
         build_connack_msg(connack_pkt,node_id);
         if( call AMSend.send( (node_id+1) ,&pkt, sizeof(connack_msg_t)) == SUCCESS)
         {
-            printf("[PanC] Sent CONNACK(%d)\n",node_id);
+            printf("[PanC] Sent CONNACK(%u)\n",node_id);
         }
         //if the node won't receive the connack, he will try to reconnect,
         //so the resend of the message is not mandatory
@@ -70,7 +71,7 @@ implementation {
 
     void handle_puback(uint8_t node_id,uint8_t node_publish_id)
     {
-        printf("[PanC] PUBACK(nid:%d,id:%d) received\n",node_id, node_publish_id);
+        printf("[PanC] PUBACK(nid:%u,id:%u) received\n",node_id, node_publish_id);
     }
 
 
@@ -81,7 +82,7 @@ implementation {
         build_suback_msg(suback_pkt,node_id);
         if( call AMSend.send( (node_id+1) ,&pkt, sizeof(suback_msg_t)) == SUCCESS)
         {
-            printf("[PanC] Sent SUBACK(%d)\n",node_id);
+            printf("[PanC] Sent SUBACK(%u)\n",node_id);
         }
         //It's the same idea of connack, if the node won't receive the suback
         //then it will resend the puback.
@@ -100,7 +101,7 @@ implementation {
             handle_suback(node_id);
             break;
         default:
-            printf("[PanC] Invalid code_id %d TaskSimpleMessage.runTask\n",code_id);
+            printf("[PanC] Invalid code_id %u TaskSimpleMessage.runTask\n",code_id);
         }
     }
     //***************** Receive Interface *****************//
@@ -136,7 +137,7 @@ implementation {
         }
         code_id=chunk & CODE_ID_MASK;
         node_id= (chunk >> GENERAL_NODE_ID_ALIGNMENT) & NODE_ID_MASK;
-        //printf("[PanC] new msg. code_id: %d, node_id: %d\n", code_id,node_id);
+        //printf("[PanC] new msg. code_id: %u, node_id: %u\n", code_id,node_id);
         switch(code_id)
         {
         case PUBACK_CODE:
@@ -160,7 +161,7 @@ implementation {
             call SubscribeTask.postTask(node_id,topic_mask,qos_mask);
             break;
         default:
-            printf("[PanC] ERROR Invalid code %d from node_id %d at Receive.receive\n", code_id,node_id);
+            printf("[PanC] ERROR Invalid code:%u. node_id %u at Receive.receive. size: %u, payload: %x\n", code_id,node_id,len,*((uint8_t*)payload) );
         }
         return msg;
     }
@@ -227,7 +228,7 @@ implementation {
         {
             topic[node_id]=topic_mask;
             qos[node_id]=qos_mask;
-            printf("[PanC] set node: %d, topic: %d, qos: %d\n", node_id,topic[node_id],qos[node_id]);
+            printf("[PanC] set node: %u, topic: %u, qos: %u\n", node_id,topic[node_id],qos[node_id]);
             call TaskSimpleMessage.postTask(SUBACK_CODE,node_id);
         }
     }
@@ -235,7 +236,7 @@ implementation {
 
     event void PublishTask.runTask(uint8_t node_id, uint8_t publish_qos,uint8_t node_publish_id, uint8_t publish_topic,uint16_t publish_payload)
     {
-        uint8_t iterator;
+        uint16_t iterator;
         //send PUBACK to node
         if(publish_qos==1)
         {
@@ -244,11 +245,11 @@ implementation {
             call PacketAcknowledgements.requestAck(&pkt);
             if( call AMSend.send( (node_id+1) ,&pkt, sizeof(puback_msg_t)) == SUCCESS)
             {
-                printf("[PanC] Sent PUBACK(nid:%d, node_pub_id: %d)\n",node_id, node_publish_id);
+                printf("[PanC] Sent PUBACK(nid:%u, node_pub_id: %u)\n",node_id, node_publish_id);
             }
             else
             {
-                printf("[Panc] FAILED PUBACK SENT nid:%d, node_pub_id: %d).Pushing in ResendBuffer\n",node_id, node_publish_id);
+                printf("[Panc] FAILED PUBACK SENT nid:%u, node_pub_id: %u).Pushing in ResendBuffer\n",node_id, node_publish_id);
                 if( (call ResendBuffer.pushMessage(node_id+1,pkt,sizeof(puback_msg_t),1))!=SUCCESS)
                 {
                     printf("[PanC] ERROR ResendBuffer is full. Discard Packet\n");
@@ -256,7 +257,7 @@ implementation {
 
             }
         }
-	printf("[PanC] publish (%d,%d) had panc_pub_id of %d\n",node_id,node_publish_id,publish_id);
+	printf("[PanC] publish (%u,%u) had panc_pub_id of %u\n",node_id,node_publish_id,publish_id);
         for(iterator=0; iterator<N_NODES; iterator++)
         {
             uint8_t iter_topic = topic[iterator];
@@ -273,12 +274,12 @@ implementation {
                 }
                 if(call AMSend.send( (iterator+1),&pkt,sizeof(publish_msg_t)) == SUCCESS)
                 {
-                    printf("[PanC] SENT PUBLISH %d->%d. pub_id: %d, qos: %d, topic: %d, payload: %d\n",node_id,iterator,
+                    printf("[PanC] SENT PUBLISH %u->%u. pub_id: %u, qos: %u, topic: %u, payload: %u\n",node_id,iterator,
                            publish_id, sending_qos,publish_topic,publish_payload);
                 }
                 else
                 {
-                    printf("[PanC] FAILED PUBLISH %d->%d. pub_id: %d, qos: %d, topic: %d, payload: %d\n",node_id,iterator,
+                    printf("[PanC] FAILED PUBLISH %u->%u. pub_id: %u, qos: %u, topic: %u, payload: %u\n",node_id,iterator,
                            publish_id, sending_qos,publish_topic,publish_payload);
                     if( (call ResendBuffer.pushMessage(iterator+1,pkt,sizeof(publish_msg_t),sending_qos))!=SUCCESS)
                     {
