@@ -1,34 +1,72 @@
-#include "Commons.h"
 
+/**************************************************************
+*
+* PanC Pan Coordinator of the network. See the specification
+* to knwo what the pan coordinator must do.
+*
+* The idea is to decouple the logic with taskss. The idea of tasks
+* with params is taken by the following resource:
+* https://github.com/tinyos/tinyos-main/blob/master/doc/txt/tep106.txt
+* Debug is performed through printf.
+*
+* PanC exploits a ResendBuffer offered by the ResendModule interface.
+* Check ResendModuleC.nc
+*
+* active_node, qos and topic represent the state of the nodes. The position
+* i represents the node i. qos and topic are bit masks. Bit:
+* 0 is associated to TEMPERATURE
+* 1 is associated to HUMIDITY
+* 2 is associated to LUMINOSITY
+*
+* publish_id is a variable that identifies a publish. It could be used for advanced
+* mechanisms.
+*
+*************************************************************/
+
+
+//Include for message structs
+#include "Commons.h"
+//include for printf
+#include "printf.h"
 
 
 #ifndef N_NODES
 #define N_NODES 8
 #endif
 
-#include "printf.h"
 
 module PanC {
     uses
     {
+        //Boot interface for init of the module
+        interface Boot;
+        //Task interfaces. Seee the related NameInterfaceC.nc module
+        //for further details
         interface TaskSimpleMessage;
         interface PublishTask;
         interface SubscribeTask;
-        interface Boot;
+        //Network interfaces
         interface AMPacket;
         interface Packet;
         interface AMSend;
         interface SplitControl;
         interface Receive;
         interface PacketAcknowledgements;
+        //Interface for the resendBuffer
         interface ResendModule as ResendBuffer;
     }
 }
 implementation {
+
+    //active_nodes represents if the i-th node has been connected to PanC
     bool active_node[N_NODES];
+    //Qos mask for the node at position i
     uint8_t qos[N_NODES];
+    //topic mask for the node at position i
     uint8_t topic[N_NODES];
     uint8_t publish_id = 0;
+    
+    //variable used to send a message. Be careful with the race conditions.
     message_t pkt;
 
     //***************** Boot interface ********************//
@@ -55,6 +93,10 @@ implementation {
     event void SplitControl.stopDone(error_t err) {}
 
     //***************** Message Handlers *****************//
+
+    //This function is called when a CONNECT is received. It just set the related field
+    //of the array active_node to true and send a connact back. An ack is not strictly needed
+    //because if the node won't receive the ack it will try to reconnect.
     void handle_connect(uint8_t node_id)
     {
         connack_msg_t * connack_pkt;
@@ -65,16 +107,17 @@ implementation {
         {
             printf("[PanC] Sent CONNACK(%u)\n",node_id);
         }
-        //if the node won't receive the connack, he will try to reconnect,
-        //so the resend of the message is not mandatory
     }
 
+
+    //Just printf that the PanC has received a PUBACK
     void handle_puback(uint8_t node_id,uint8_t node_publish_id)
     {
-        printf("[PanC] PUBACK(nid:%u,id:%u) received\n",node_id, node_publish_id);
+        printf("[PanC] !PUBACK(nid:%u,pubid:%u)\n",node_id, node_publish_id);
     }
 
-
+    //Function that manages the action of sending a SUBACK. Just like CONNACK,
+    //if the node wont' receive the SUBACK then it will try to resend a SUBSCRIBE
     void handle_suback(uint8_t node_id)
     {
         suback_msg_t * suback_pkt;
@@ -84,9 +127,6 @@ implementation {
         {
             printf("[PanC] Sent SUBACK(%u)\n",node_id);
         }
-        //It's the same idea of connack, if the node won't receive the suback
-        //then it will resend the puback.
-
     }
 
     //***************** TaskSimpleMessage Interface ********//
@@ -101,13 +141,16 @@ implementation {
             handle_suback(node_id);
             break;
         default:
-            printf("[PanC] Invalid code_id %u TaskSimpleMessage.runTask\n",code_id);
+            printf("[PanC] ERROR Invalid code_id %u TaskSimpleMessage.runTask\n",code_id);
         }
     }
     //***************** Receive Interface *****************//
+
+    //Get the message and act basing ont its code.
     event message_t * Receive.receive(message_t* msg, void* payload, uint8_t len)
     {
-        uint8_t chunk;
+        //Declare variables. I know... they're a lot
+        uint8_t header;
         uint8_t code_id;
         uint8_t node_id;
         uint8_t topic_mask;
@@ -119,24 +162,24 @@ implementation {
         subscribe_msg_t * sub_msg;
         if(len==sizeof(suback_msg_t) || len==sizeof(connect_msg_t)|| len==sizeof(connack_msg_t))
         {
-            chunk = *((uint8_t *)payload);
+            header = *((uint8_t *)payload);
         }
         else if(len==sizeof(subscribe_msg_t) || len==sizeof(puback_msg_t))
         {
-            chunk = ((uint8_t *)payload)[1];
+            header = ((uint8_t *)payload)[1];
         }
         else if(len==sizeof(publish_msg_t))
         {
             publish_msg_t * pub_msg = (publish_msg_t *) payload;
-            chunk = pub_msg->header;
+            header = pub_msg->header;
         }
         else
         {
             printf("[PanC] ERROR Reception of a wrong size ):\n");
             return msg;
         }
-        code_id=chunk & CODE_ID_MASK;
-        node_id= (chunk >> GENERAL_NODE_ID_ALIGNMENT) & NODE_ID_MASK;
+        code_id=header & CODE_ID_MASK;
+        node_id= (header >> GENERAL_NODE_ID_ALIGNMENT) & NODE_ID_MASK;
         //printf("[PanC] new msg. code_id: %u, node_id: %u\n", code_id,node_id);
         switch(code_id)
         {
@@ -149,7 +192,7 @@ implementation {
             break;
         case PUBLISH_CODE:
             publish_qos =( ((publish_msg_t *)payload)->payload ) & 1;
-            publish_topic = chunk >> PUBLISH_TOPIC_ALIGNMENT;
+            publish_topic = header >> PUBLISH_TOPIC_ALIGNMENT;
             publish_payload = ( ((publish_msg_t *)payload)->payload )>>1;
             node_publish_id = ((publish_msg_t *)payload)->publish_id;
             call PublishTask.postTask(node_id,publish_qos,node_publish_id,publish_topic,publish_payload);
