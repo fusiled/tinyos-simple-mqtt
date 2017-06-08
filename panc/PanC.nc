@@ -38,25 +38,25 @@
 
 
 module PanC {
-uses
-{
-    //Boot interface for init of the module
-    interface Boot;
-    //Task interfaces. Seee the related NameInterfaceC.nc module
-    //for further details
-    interface TaskSimpleMessage;
-    interface PublishTask;
-    interface SubscribeTask;
-    //Network interfaces
-    interface AMPacket;
-    interface Packet;
-    interface AMSend;
-    interface SplitControl;
-    interface Receive;
-    interface PacketAcknowledgements;
-    //Interface for the resendBuffer
-    interface ResendModule as ResendBuffer;
-}
+    uses
+    {
+        //Boot interface for init of the module
+        interface Boot;
+        //Task interfaces. Seee the related NameInterfaceC.nc module
+        //for further details
+        interface TaskSimpleMessage;
+        interface PublishTask;
+        interface SubscribeTask;
+        //Network interfaces
+        interface AMPacket;
+        interface Packet;
+        interface AMSend;
+        interface SplitControl;
+        interface Receive;
+        interface PacketAcknowledgements;
+        //Interface for the resendBuffer
+        interface ResendModule as ResendBuffer;
+    }
 }
 implementation {
 
