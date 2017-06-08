@@ -1,5 +1,19 @@
-#include "Commons.h"
 
+/************************************************************
+*
+* PanC interconnection
+*
+* Nothing of complicated. Just note SerialPrintfC module. In
+* this way it is possible to use the printf for the output in 
+* Cooja simulator and on serial ports.
+*
+* ResendModule is the ResendBuffer in PanC.nc
+*
+*************************************************************/
+
+
+
+#include "Commons.h"
 #define NEW_PRINTF_SEMANTICS
 #include "printf.h"
 

@@ -1,3 +1,0 @@
-#!/bin/bash
-rm main.exe
-tos-set-symbols --exe build/telosb/main.exe main.exe TOS_NODE_ID=9 ActiveMessageAddressC__addr=9
