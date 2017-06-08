@@ -67,8 +67,11 @@ implementation {
     uint8_t publish_id = 0;
     
     //variable used to send a message. Be careful with the race conditions.
-    message_t pkt;
-
+    message_t resend_pkt;
+    message_t publish_pkt;
+    message_t puback_pkt;
+    message_t connack_pkt;
+    message_t suback_pkt;
     //***************** Boot interface ********************//
     event void Boot.booted()
     {
@@ -99,11 +102,11 @@ implementation {
     //because if the node won't receive the ack it will try to reconnect.
     void handle_connect(uint8_t node_id)
     {
-        connack_msg_t * connack_pkt;
+        connack_msg_t * connack_msg;
         active_node[node_id]=TRUE;
-        connack_pkt = call Packet.getPayload(&pkt,sizeof(connack_msg_t));
-        build_connack_msg(connack_pkt,node_id);
-        if( call AMSend.send( (node_id+1) ,&pkt, sizeof(connack_msg_t)) == SUCCESS)
+        connack_msg = call Packet.getPayload(&connack_pkt,sizeof(connack_msg_t));
+        build_connack_msg(connack_msg,node_id);
+        if( call AMSend.send( (node_id+1) ,&connack_pkt, sizeof(connack_msg_t)) == SUCCESS)
         {
             printf("[PanC] Sent CONNACK(%u)\n",node_id);
         }
@@ -120,10 +123,10 @@ implementation {
     //if the node wont' receive the SUBACK then it will try to resend a SUBSCRIBE
     void handle_suback(uint8_t node_id)
     {
-        suback_msg_t * suback_pkt;
-        suback_pkt = call Packet.getPayload(&pkt,sizeof(suback_msg_t));
-        build_suback_msg(suback_pkt,node_id);
-        if( call AMSend.send( (node_id+1) ,&pkt, sizeof(suback_msg_t)) == SUCCESS)
+        suback_msg_t * suback_msg;
+        suback_pkt = call Packet.getPayload(&suback_msg,sizeof(suback_msg_t));
+        build_suback_msg(suback_msg,node_id);
+        if( call AMSend.send( (node_id+1) ,&suback_pkt, sizeof(suback_msg_t)) == SUCCESS)
         {
             printf("[PanC] Sent SUBACK(%u)\n",node_id);
         }
@@ -256,7 +259,7 @@ implementation {
             }
             else
             {
-                printf("[PanC] ++Failure in Packet resend\n");
+                printf("[PanC] ERROR Failure in Packet resend\n");
                 if( (call ResendBuffer.pushMessage(node_id+1,*buf,buf_size,ack_requested))!=SUCCESS)
                 {
                     printf("[PanC] ERROR ResendBuffer is full. Discard Packet\n");
@@ -283,17 +286,17 @@ implementation {
         //send PUBACK to node
         if(publish_qos==1)
         {
-            puback_msg_t * puback_pkt = call Packet.getPayload(&pkt,sizeof(puback_msg_t));
-            build_puback_msg(puback_pkt,node_id,publish_topic,node_publish_id);
-            call PacketAcknowledgements.requestAck(&pkt);
-            if( call AMSend.send( (node_id+1) ,&pkt, sizeof(puback_msg_t)) == SUCCESS)
+            puback_msg_t * puback_msg = call Packet.getPayload(&puback_pkt,sizeof(puback_msg_t));
+            build_puback_msg(puback_msg,node_id,publish_topic,node_publish_id);
+            call PacketAcknowledgements.requestAck(&puback_pkt);
+            if( call AMSend.send( (node_id+1) ,&puback_pkt, sizeof(puback_msg_t)) == SUCCESS)
             {
                 printf("[PanC] Sent PUBACK(nid:%u, node_pub_id: %u)\n",node_id, node_publish_id);
             }
             else
             {
                 printf("[Panc] FAILED PUBACK SENT nid:%u, node_pub_id: %u).Pushing in ResendBuffer\n",node_id, node_publish_id);
-                if( (call ResendBuffer.pushMessage(node_id+1,pkt,sizeof(puback_msg_t),1))!=SUCCESS)
+                if( (call ResendBuffer.pushMessage(node_id+1,puback_pkt,sizeof(puback_msg_t),1))!=SUCCESS)
                 {
                     printf("[PanC] ERROR ResendBuffer is full. Discard Packet\n");
                 }
@@ -308,14 +311,14 @@ implementation {
             {
                 //send publish to that node
                 uint8_t sending_qos;
-                publish_msg_t * mess = call Packet.getPayload(&pkt,sizeof(publish_msg_t));
+                publish_msg_t * mess = call Packet.getPayload(&publish_pkt,sizeof(publish_msg_t));
                 sending_qos = (qos[iterator]>>publish_topic) & 1;
                 build_publish_msg(mess,node_id,sending_qos,publish_id,publish_topic,publish_payload);
                 if(sending_qos>0)
                 {
-                    call PacketAcknowledgements.requestAck(&pkt);
+                    call PacketAcknowledgements.requestAck(&publish_pkt);
                 }
-                if(call AMSend.send( (iterator+1),&pkt,sizeof(publish_msg_t)) == SUCCESS)
+                if(call AMSend.send( (iterator+1),&publish_pkt,sizeof(publish_msg_t)) == SUCCESS)
                 {
                     printf("[PanC] SENT PUBLISH %u->%u. pub_id: %u, qos: %u, topic: %u, payload: %u\n",node_id,iterator,
                            publish_id, sending_qos,publish_topic,publish_payload);
@@ -324,7 +327,7 @@ implementation {
                 {
                     printf("[PanC] FAILED PUBLISH %u->%u. pub_id: %u, qos: %u, topic: %u, payload: %u\n",node_id,iterator,
                            publish_id, sending_qos,publish_topic,publish_payload);
-                    if( (call ResendBuffer.pushMessage(iterator+1,pkt,sizeof(publish_msg_t),sending_qos))!=SUCCESS)
+                    if( (call ResendBuffer.pushMessage(iterator+1,publish_pkt,sizeof(publish_msg_t),sending_qos))!=SUCCESS)
                     {
                         printf("[PanC] ERROR ResendBuffer is full. Discard Packet\n");
                     }
@@ -337,12 +340,12 @@ implementation {
 
     event void ResendBuffer.sendMessage(uint8_t destination, message_t msg, uint8_t payload_size, bool ack_requested)
     {
-        pkt=msg;
+        resend_pkt=msg;
         if(ack_requested)
         {
-            call PacketAcknowledgements.requestAck(&pkt);
+            call PacketAcknowledgements.requestAck(&resend_pkt);
         }
-        if(call AMSend.send( destination,&pkt,payload_size) == SUCCESS)
+        if(call AMSend.send( destination,&resend_pkt,payload_size) == SUCCESS)
         {
             //printf("[PanC] Successfully resent message\n");
         }
