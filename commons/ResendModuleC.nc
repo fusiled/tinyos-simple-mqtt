@@ -3,7 +3,7 @@
 #define RESEND_BUFFER_SIZE 128
 #endif
 
-#define RESEND_DELTA_TIME 32
+#define RESEND_DELTA_TIME 32 
 
 #define RESEND_MODULE_NO_ACK 0
 #define RESEND_MODULE_ACK 1

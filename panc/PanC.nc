@@ -124,7 +124,7 @@ implementation {
     void handle_suback(uint8_t node_id)
     {
         suback_msg_t * suback_msg;
-        suback_pkt = call Packet.getPayload(&suback_msg,sizeof(suback_msg_t));
+        suback_msg = call Packet.getPayload(&suback_pkt,sizeof(suback_msg_t));
         build_suback_msg(suback_msg,node_id);
         if( call AMSend.send( (node_id+1) ,&suback_pkt, sizeof(suback_msg_t)) == SUCCESS)
         {
