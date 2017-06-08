@@ -1,6 +1,14 @@
+/***************************************************
+*
+* NodeC wiring. Nothing of special. Just note
+* SerialPrintfC to print with printf to stdout
+*
+***************************************************/
+
+
+
 #define NEW_PRINTF_SEMANTICS
 #include "printf.h"
-
 
 configuration NodeCApp
 {

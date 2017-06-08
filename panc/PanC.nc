@@ -4,7 +4,7 @@
 * PanC Pan Coordinator of the network. See the specification
 * to knwo what the pan coordinator must do.
 *
-* The idea is to decouple the logic with taskss. The idea of tasks
+* The idea is to decouple the logic with tasks. The idea of tasks
 * with params is taken by the following resource:
 * https://github.com/tinyos/tinyos-main/blob/master/doc/txt/tep106.txt
 * Debug is performed through printf.
@@ -106,6 +106,7 @@ implementation {
     void handle_connect(uint8_t node_id)
     {
         connack_msg_t * connack_msg;
+        printf("[PanC] !CONNECT(node:%u)\n",node_id);
         active_node[node_id]=TRUE;
         connack_msg = call Packet.getPayload(&connack_pkt,sizeof(connack_msg_t));
         build_connack_msg(connack_msg,node_id);
@@ -119,7 +120,7 @@ implementation {
     //Just printf that the PanC has received a PUBACK
     void handle_puback(uint8_t node_id,uint8_t node_publish_id)
     {
-        printf("[PanC] PUBACK(nid:%u,pubid:%u) sent\n",node_id, node_publish_id);
+        printf("[PanC] !PUBACK(node:%u,pubid:%u)\n",node_id, node_publish_id);
     }
 
     //Function that manages the action of sending a SUBACK. Just like CONNACK,
@@ -287,7 +288,7 @@ implementation {
         {
             topic[node_id]=topic_mask;
             qos[node_id]=qos_mask;
-            printf("[PanC] !SUBSCRIBE(node: %u, topic: %u, qos: %u)\n", node_id,topic[node_id],qos[node_id]);
+            printf("[PanC] !SUBSCRIBE(node:%u, topic:%u, qos:%u)\n", node_id,topic[node_id],qos[node_id]);
             call TaskSimpleMessage.postTask(SUBACK_CODE,node_id);
         }
     }
@@ -298,6 +299,7 @@ implementation {
     event void PublishTask.runTask(uint8_t node_id, uint8_t publish_qos,uint8_t node_publish_id, uint8_t publish_topic,uint16_t publish_payload)
     {
         uint16_t iterator;
+        printf("[PanC] !PUBLISH(node:%u, qos:%u, topic:%u, payload:%u, node_pubid:%u, panc_pubid:%u)\n",node_id,publish_qos,publish_topic,publish_payload,node_publish_id,publish_id);
         //send PUBACK to node
         if(publish_qos==1)
         {
@@ -318,8 +320,8 @@ implementation {
 
             }
         }
+        //printf("[PanC] publish (%u,%u) had panc_pub_id of %u\n",node_id,node_publish_id,publish_id);
         //Forward the publish to the nodes interested to the topic. Also set acks if needed
-        printf("[PanC] publish (%u,%u) had panc_pub_id of %u\n",node_id,node_publish_id,publish_id);
         for(iterator=0; iterator<N_NODES; iterator++)
         {
             uint8_t iter_topic = topic[iterator];
