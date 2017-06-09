@@ -1,6 +1,20 @@
+/************************************************************
+*
+* Header for message structs and creations.
+* every type of message have a related struct. see all the typedefs
+* declation.
+*
+* There's a function foreach message that builds it.
+* The defines are very useful to get fields of the structs. The
+* fields are packed with bit-field operations to reduce the size
+* of the packets.
+*
+************************************************************/
+
+
+
 #ifndef COMMONS_H
 #define COMMONS_H
-
 
 #define GENERAL_NODE_ID_ALIGNMENT 3
 
@@ -44,6 +58,7 @@ typedef nx_struct publish_msg_struct
 */
 
 #define CONNECT_CODE 1
+//THe node that tries to connect
 #define CONNECT_NODE_ID_ALIGNMENT (GENERAL_NODE_ID_ALIGNMENT)
 void build_connect_msg(connect_msg_t * msg,uint8_t node_id)
 {
@@ -52,6 +67,7 @@ void build_connect_msg(connect_msg_t * msg,uint8_t node_id)
 }
 
 #define CONNACK_CODE 2
+//The node that must receive the connack
 #define CONNACK_NODE_ID_ALIGNMENT (GENERAL_NODE_ID_ALIGNMENT)
 void build_connack_msg(connack_msg_t * msg, uint8_t node_id)
 {
@@ -60,10 +76,16 @@ void build_connack_msg(connack_msg_t * msg, uint8_t node_id)
 }
 
 #define PUBLISH_CODE 3
+// node_id is the one of the node that published the event
 #define PUBLISH_NODE_ID_ALIGNMENT GENERAL_NODE_ID_ALIGNMENT
+//The topic of the publish
 #define PUBLISH_TOPIC_ALIGNMENT (PUBLISH_NODE_ID_ALIGNMENT + 3)
+//id of the publish. It is associated to the node that sends it
 #define PUBLISH_ID_ALIGNMENT (0)
+//qos of the publish message. If it comes from a node then it is set
+//by qos_mask. If it comes from the panc then it is set with qos array
 #define PUBLISH_QOS_ALIGNMENT ( 0 )
+//the value of the publish
 #define PUBLISH_PAYLOAD_ALIGNMENT  (PUBLISH_QOS_ALIGNMENT + 1)
 void build_publish_msg(publish_msg_t * msg,uint8_t node_id,bool qos,uint8_t publish_id ,uint8_t topic,uint16_t payload)
 {
@@ -78,8 +100,12 @@ void build_publish_msg(publish_msg_t * msg,uint8_t node_id,bool qos,uint8_t publ
 }
 
 #define PUBACK_CODE 4
+//if it comes from a node then it is the id of the node who replied
+//if it comes from panc then it is the id of the node who published
 #define PUBACK_NODE_ID_ALIGNMENT (GENERAL_NODE_ID_ALIGNMENT)
+//the topic of the publish associated to this PUBACK
 #define PUBACK_TOPIC_ALIGNMENT (PUBACK_NODE_ID_ALIGNMENT + 3)
+//the id of the publish associated to this PUBACK
 #define PUBACK_ID_ALIGNMENT (PUBACK_TOPIC_ALIGNMENT + 2)
 void build_puback_msg(puback_msg_t * msg,uint8_t node_id,uint8_t topic, uint8_t publish_id)
 {
@@ -90,8 +116,11 @@ void build_puback_msg(puback_msg_t * msg,uint8_t node_id,uint8_t topic, uint8_t 
 }
 
 #define SUBSCRIBE_CODE 5
+//id of the node who wants to subscribe
 #define SUBSCRIBE_NODE_ID_ALIGNMENT (GENERAL_NODE_ID_ALIGNMENT)
+//topic mask of the subscription
 #define SUBSCRIBE_TOPIC_MASK_ALIGNMENT (SUBSCRIBE_NODE_ID_ALIGNMENT + 3 + 2)
+//qos mask of the subscription
 #define SUBSCRIBE_QOS_MASK_ALIGNMENT (SUBSCRIBE_TOPIC_MASK_ALIGNMENT + 3 + 1)
 void build_subscribe_msg(subscribe_msg_t * msg,uint8_t node_id,uint8_t topic_mask, uint8_t qos_mask)
 {
@@ -103,6 +132,7 @@ void build_subscribe_msg(subscribe_msg_t * msg,uint8_t node_id,uint8_t topic_mas
 
 
 #define SUBACK_CODE 6
+//node who must receive the suback
 #define SUBACK_NODE_ID_ALIGNMENT (GENERAL_NODE_ID_ALIGNMENT)
 void build_suback_msg(suback_msg_t * msg,uint8_t node_id)
 {
