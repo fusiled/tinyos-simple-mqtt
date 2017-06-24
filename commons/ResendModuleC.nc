@@ -1,3 +1,17 @@
+/**************************************************************
+* Implement a resend buffer. The logic who uses the network modules
+* must be implemented in the event ResenModule.sendMessage in the module
+* who used the ResendModule interface.
+* 
+* This module is just a simple queue. If it has elements in it there's
+* a timer who fires evert RESEND_DELTA_TIME milliseconds. If the buffer is
+* full the command ResendModule.pushMessage returns FAIL, otherwise SUCCES.
+* It is always a good idea to check the return value of this command.
+*
+*
+*
+**************************************************************/
+
 
 #ifndef RESEND_BUFFER_SIZE
 #define RESEND_BUFFER_SIZE 160
