@@ -17,7 +17,7 @@
 #define NEW_PRINTF_SEMANTICS
 #include "printf.h"
 
-configuration PanCApp
+configuration PanAppC
 {
 }
 implementation
@@ -56,6 +56,5 @@ implementation
     PanC.ResendBuffer -> ResendModuleC;
     ResendModuleC.ResendTimer -> ResendTimerC;
 
-    PanC.AMPacket -> AMSenderC;
     PanC.Packet -> AMSenderC;
 }

@@ -89,7 +89,6 @@ module NodeC
         interface PublishTask as SendPublishTask;
         interface PubAckTask as SendPubAckTask;
         //network interfaces
-        interface AMPacket;
         interface Packet;
         interface AMSend;
         interface SplitControl;

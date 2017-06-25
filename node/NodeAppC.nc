@@ -10,7 +10,7 @@
 #define NEW_PRINTF_SEMANTICS
 #include "printf.h"
 
-configuration NodeCApp
+configuration NodeAppC
 {
 }
 implementation
@@ -48,7 +48,6 @@ implementation
     NodeC.AMSend -> AMSenderC;
     NodeC.SplitControl -> ActiveMessageC;
     NodeC.PacketAcknowledgements -> ActiveMessageC;
-    NodeC.AMPacket -> AMSenderC;
     NodeC.Packet -> AMSenderC;
 
     NodeC.TaskSimpleMessage -> TaskSimpleMessageC;
