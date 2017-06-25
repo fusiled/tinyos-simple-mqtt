@@ -48,7 +48,6 @@ module PanC {
         interface PublishTask;
         interface SubscribeTask;
         //Network interfaces
-        interface AMPacket;
         interface Packet;
         interface AMSend;
         interface SplitControl;
