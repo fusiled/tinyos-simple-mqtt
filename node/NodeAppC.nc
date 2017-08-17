@@ -19,6 +19,7 @@ implementation
     components NodeC;
     //MainC
     components MainC;
+    components ResendModuleC;
     //Network components
     components new AMSenderC(AM_MY_MSG);
     components new AMReceiverC(AM_MY_MSG);
@@ -41,8 +42,11 @@ implementation
     components new FakeSensorC() as HumiditySensor;
     components new FakeSensorC() as LuminositySensor;
 
+    components new TimerMilliC() as ResendTimerC;
+
 
     /************* WIRINGS *******************/
+
     NodeC.Boot -> MainC;
     NodeC.Receive -> AMReceiverC;
     NodeC.AMSend -> AMSenderC;
@@ -60,4 +64,9 @@ implementation
 
     NodeC.SensorTimer -> SensorTimerC;
     NodeC.TimeoutTimer -> TimeoutTimerC;
+
+    NodeC.ResendBuffer -> ResendModuleC;
+    ResendModuleC.ResendTimer -> ResendTimerC;
+
+
 }

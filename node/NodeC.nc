@@ -94,6 +94,7 @@ module NodeC
         interface SplitControl;
         interface Receive;
         interface PacketAcknowledgements;
+	interface ResendModule as ResendBuffer;
         //Sensors
         interface Read<uint16_t> as TemperatureRead;
         interface Read<uint16_t> as HumidityRead;
@@ -116,6 +117,7 @@ implementation
     message_t pkt;
     message_t pub_pkt;
     message_t puback_pkt;
+    message_t resend_pkt;
 
     //***************** Boot interface ********************//
     //Boot the system
@@ -140,7 +142,7 @@ implementation
     {
         if(err == SUCCESS)
         {
-            printf("[Node %u] READY! Connecting to PanCoordinator\n",NODE_ID);
+            printf("[Node %u] !READY Connecting to PanCoordinator\n",NODE_ID);
             call TaskSimpleMessage.postTask(CONNECT_CODE,NODE_ID);
         }
         else
@@ -161,7 +163,7 @@ implementation
         if(call AMSend.send(PAN_COORDINATOR_ADDRESS,&pkt,sizeof(subscribe_msg_t)) == SUCCESS)
         {
             call TimeoutTimer.startOneShot(CONNECT_TIMEOUT);
-            printf("[Node %u] !SUBSCRIBE(%u,%u)\n",NODE_ID,topic_mask,qos_mask);
+            printf("[Node %u] !SUBSCRIBE(%u,%u) received\n",NODE_ID,topic_mask,qos_mask);
         }
     }
 
@@ -184,7 +186,7 @@ implementation
     //the subscribe
     void handle_connack()
     {
-        printf("[Node %u] !CONNACK(node:%u)\n",NODE_ID,NODE_ID);
+        printf("[Node %u] !CONNACK(node:%u) received\n",NODE_ID,NODE_ID);
         state=NODE_STATE_SUBSCRIBING;
         call SensorTimer.startPeriodic( SENSOR_PERIOD );
         post subscribeTask();
@@ -194,7 +196,7 @@ implementation
     void handle_suback()
     {
         state = NODE_STATE_PUBLISHING;
-        printf("[Node %u] !SUBACK(node:%u)\n",NODE_ID,NODE_ID);
+        printf("[Node %u] !SUBACK(node:%u) received\n",NODE_ID,NODE_ID);
     }
 
 
@@ -207,7 +209,7 @@ implementation
         publish_topic = (publish_msg->header)>>PUBLISH_TOPIC_ALIGNMENT;
         msg_pubid =  publish_msg->publish_id;
         pub_payload = publish_msg->payload;
-        printf("[Node %u] !PUBLISH(node:%u,topic:%u, payload:%u,pid: %u)\n",NODE_ID,NODE_ID,publish_topic,pub_payload,msg_pubid);
+        printf("[Node %u] !PUBLISH(node:%u,topic:%u, payload:%u,pid: %u) received\n",NODE_ID,NODE_ID,publish_topic,pub_payload,msg_pubid);
         if ( ((qos_mask>>publish_topic)&1)==1)
         {
             call SendPubAckTask.postTask(NODE_ID,publish_topic,msg_pubid);
@@ -218,7 +220,7 @@ implementation
     {
         uint8_t msg_pubid;
         msg_pubid = ((uint8_t *)puback_msg)[1];
-        printf("[Node %u] !PUBACK(node:%u,pid:%u)\n",NODE_ID,NODE_ID, msg_pubid);
+        printf("[Node %u] !PUBACK(node:%u,pid:%u) received\n",NODE_ID,NODE_ID, msg_pubid);
     }
 
     //***************** TaskSimpleMessage Interface ********//
@@ -396,19 +398,66 @@ implementation
         call PacketAcknowledgements.requestAck(&pub_pkt);
         if(call AMSend.send(PAN_COORDINATOR_ADDRESS,&pub_pkt,sizeof(publish_msg_t)) == SUCCESS)
         {
-            printf("[Node %u] !PUBLISH(qos:%u,node_pubid:%u,topic:%u,payload:%u)\n",NODE_ID,qos,node_publish_id,topic,payload);
+            printf("[Node %u] !PUBLISH(qos:%u,node_pubid:%u,topic:%u,payload:%u) received\n",NODE_ID,qos,node_publish_id,topic,payload);
         }
+        else
+        {
+                 printf("[Node %u] FAILED PUBLISH(qos:%u,node_pubid:%u,topic:%u,payload:%u)\n",NODE_ID,qos,node_publish_id,topic,payload);
+                    if( (call ResendBuffer.pushMessage(PAN_COORDINATOR_ADDRESS,pub_pkt,sizeof(publish_msg_t),qos))!=SUCCESS)
+                    {
+                        printf("[Node %u] ERROR ResendBuffer is full. Discard Packet\n",node_id);
+                    }
+        }
+       
     }
 
     //Send a PUBACK to the pan coordinator
     event void SendPubAckTask.runTask(uint8_t node_id, uint8_t panc_publish_topic,uint8_t panc_publish_id)
     {
         puback_msg_t * mess = call Packet.getPayload(&puback_pkt,sizeof(puback_msg_t));
+	bool sending_qos= (qos_mask >>panc_publish_topic) & 1;
         build_puback_msg(mess,NODE_ID,panc_publish_topic,panc_publish_id);
+	
         call PacketAcknowledgements.requestAck(&puback_pkt);
         if(call AMSend.send(PAN_COORDINATOR_ADDRESS,&puback_pkt,sizeof(puback_msg_t)) == SUCCESS)
         {
             printf("[Node %u] PUBACK(publish_id:%u,topic:%u) sent\n",NODE_ID,panc_publish_id,panc_publish_topic);
+        }
+        else
+        {
+		
+                    printf("[Node %u] FAILED PUBACK(publish_id:%u,topic:%u). qos: %u,\n",node_id,
+                           publish_id,panc_publish_topic, sending_qos);
+                    if( (call ResendBuffer.pushMessage(PAN_COORDINATOR_ADDRESS,puback_pkt,sizeof(puback_msg_t),sending_qos))!=SUCCESS)
+                    {
+                        printf("[Node %u] ERROR ResendBuffer is full. Discard Packet\n",node_id);
+                    }
+        }
+    }
+
+
+   //send the passed message to the specified destination. NOTE: destination is different from node_id!!!
+    //We rely on the fact that the address of a node is node_id+1. If we cannot send a packet then it is reinserted back
+    //in the queue
+    event void ResendBuffer.sendMessage(uint8_t destination, message_t msg, uint8_t payload_size, bool ack_requested)
+    {
+        //Make this assignment otherwise the mote will crash
+        resend_pkt=msg;
+        if(ack_requested)
+        {
+            call PacketAcknowledgements.requestAck(&resend_pkt);
+        }
+        if(call AMSend.send( destination,&resend_pkt,payload_size) == SUCCESS)
+        {
+            //printf("[Node %u] Successfully resent message\n",NODE_ID);
+        }
+        else
+        {
+            //printf("[Node %u] Error in resent message. Reinserting back into the queue\n",NODE_ID);
+            if( (call ResendBuffer.pushMessage(destination,msg,payload_size,ack_requested))!=SUCCESS)
+            {
+                printf("[Node %u] ERROR ResendBuffer is full. Discard Packet\n",NODE_ID);
+            }
         }
     }
 
